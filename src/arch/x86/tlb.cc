@@ -398,13 +398,15 @@ TLB::translate(RequestPtr req, ThreadContext *tc, Translation *translation,
          *          bool inUser = (m5Reg.cpl == 3 && !(flags & (CPL0FlagBit << FlagShift)));
             		CR0 cr0 = tc->readMiscRegNoEffect(MISCREG_CR0);
             		//按照注释上的解释是paging protection checks
-         *          	如果(inUser为true且entry的user为false)或(mode为write且badWrite为true)时
-         *          		return std::make_shared<PageFault>(vaddr, true, mode, inUser,false);
-         *              如果storeCheck为true且badWrite为true
-         *              Addr paddr = entry->paddr | (vaddr & mask(entry->logBytes));
+         *          如果(inUser为true且entry的user为false)或(mode为write且badWrite为true)时
+         *          	return std::make_shared<PageFault>(vaddr, true, mode, inUser,false);
+         *          如果storeCheck为true且badWrite为true
+         *          	Addr paddr = entry->paddr | (vaddr & mask(entry->logBytes));
          *              req->setPaddr(paddr);
-         *
-         *
+         *			如果entry->uncacheable为true
+         *				req->setFlags(Request::UNCACHEABLE | Request::STRICT_ORDER);
+         *		否则，req->setPaddr(vaddr);
+         *	return return finalizePhysical(req, tc, mode);
          */
         // If paging is enabled, do the translation.
         if (m5Reg.paging) {
