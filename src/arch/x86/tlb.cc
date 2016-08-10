@@ -283,7 +283,67 @@ TLB::finalizePhysical(RequestPtr req, ThreadContext *tc, Mode mode) const
 
     return NoFault;
 }
-
+/*
+ * Fault:translate()
+ * 通过调用req->getFlags()声明初始化uint32_t类型的flags
+ * int seg = flags & SegmentFlagMask;
+ * bool storeCheck = flags & (StoreCheck << FlagShift);
+ * 将delayedResponse初始化为false
+ * 如果seg==SEGMENT_REG_MS(Emulation memory),return translateInt(req, tc);
+ * 调用req->getVaddr()获取虚拟地址vaddr
+ * HandyM5Reg m5Reg = tc->readMiscRegNoEffect(MISCREG_M5_REG);
+ * readMiscRegNoEffect()的调用过程:
+ *    cpu/o3/thread_context.hh->readMiscRegNoEffect()
+ *    cpu/o3/cpu.cc->readMiscRegNoEffect()
+ *    arch/X86/isa.cc->readMiscRegNoEffect()
+ * 最后是return regVal[miscReg](regVal的初始化暂时没有找到，作用待解析)
+ * 如果m5Reg.prot为true，即开启protected mode了
+ * 	  如果m5Reg.mod不是LongMode
+ * 	     如果seg不为SEGMENT_REG_TSG/SYS_SEGMENT_REG_IDTR/SEGMENT_REG_HS/SEGMENT_REG_LS
+ * 	     且tc->readMiscRegNoEffect(MISCREG_SEG_SEL(seg))为false
+ *			return std::make_shared<GeneralProtection>(0);
+ *		 bool expandDown = false;
+ *		 SegAttr attr = tc->readMiscRegNoEffect(MISCREG_SEG_ATTR(seg));
+ *		 如果seg大于SEGMENT_REG_ES且同时小于SEGMENT_REG_HS,do protection/limit checks
+ *		 	{...}(内容过于复杂，暂时无法一下子理解清楚。。。)
+ *		 如果m5Reg.submode不等于SixtyFourBitMode或flags&(AddrSizeFlagBit<<FlagShift)true
+ *		 	vaddr &= mask(32);(mask(32)返回64位二进制数，前32位0，后32位1)
+ *		 如果m5Reg.paging为true，那么执行translation
+ *			TlbEntry *entry = lookup(vaddr);//LRU的seq num +1，返回entry
+ *          如果entry为NULL//根据lookup()分析可得
+ *				如果是FullSystem模式
+ *					Fault fault = walker->start(tc, translation, req, mode);
+ *					如果timing或fault!=Nofault时
+ *						那么delayedResponse=true
+ *						return fault
+ *					再次令entry = lookup(vaddr);//没啥用啊，梳理的时候再看看
+ *				否则
+ *					Process *p = tc->getProcessPtr();
+ *					声明TlbEntry newEntry;
+ *					bool success = p->pTable->lookup(vaddr, newEntry);
+ *					如果success为false且mode不是execute(fetch stage调用时是execute)
+ *						如果p->fixupStackFault(vaddr)为true
+ *							那么success = p->pTable->lookup(vaddr, newEntry);
+ *							寻找在新的page页中寻找entry
+ *						如果success为false
+ *							return std::make_shared<PageFault>(vaddr, true, mode,
+                                                   true, false);
+ *						否则
+ *							Addr alignedVaddr = p->pTable->pageAlign(vaddr);
+ *							entry = insert(alignedVaddr, newEntry);
+ *          bool inUser = (m5Reg.cpl == 3 && !(flags & (CPL0FlagBit << FlagShift)));
+    		CR0 cr0 = tc->readMiscRegNoEffect(MISCREG_CR0);
+    		//按照注释上的解释是paging protection checks
+ *          如果(inUser为true且entry的user为false)或(mode为write且badWrite为true)时
+ *          	return std::make_shared<PageFault>(vaddr, true, mode, inUser,false);
+ *          如果storeCheck为true且badWrite为true
+ *          	Addr paddr = entry->paddr | (vaddr & mask(entry->logBytes));
+ *              req->setPaddr(paddr);
+ *			如果entry->uncacheable为true
+ *				req->setFlags(Request::UNCACHEABLE | Request::STRICT_ORDER);
+ *		否则，req->setPaddr(vaddr);
+ *	return return finalizePhysical(req, tc, mode);
+ */
 Fault
 TLB::translate(RequestPtr req, ThreadContext *tc, Translation *translation,
         Mode mode, bool &delayedResponse, bool timing)
@@ -347,67 +407,7 @@ TLB::translate(RequestPtr req, ThreadContext *tc, Translation *translation,
         if (m5Reg.submode != SixtyFourBitMode ||
                 (flags & (AddrSizeFlagBit << FlagShift)))
             vaddr &= mask(32);
-        /*
-         * Fault:translate()
-         * 通过调用req->getFlags()声明初始化uint32_t类型的flags
-         * int seg = flags & SegmentFlagMask;
-         * bool storeCheck = flags & (StoreCheck << FlagShift);
-         * 将delayedResponse初始化为false
-         * 如果seg==SEGMENT_REG_MS(Emulation memory),return translateInt(req, tc);
-         * 调用req->getVaddr()获取虚拟地址vaddr
-         * HandyM5Reg m5Reg = tc->readMiscRegNoEffect(MISCREG_M5_REG);
-         * readMiscRegNoEffect()的调用过程:
-         *    cpu/o3/thread_context.hh->readMiscRegNoEffect()
-         *    cpu/o3/cpu.cc->readMiscRegNoEffect()
-         *    arch/X86/isa.cc->readMiscRegNoEffect()
-         * 最后是return regVal[miscReg](regVal的初始化暂时没有找到，作用待解析)
-         * 如果m5Reg.prot为true，即开启protected mode了
-         * 	  如果m5Reg.mod不是LongMode
-         * 	     如果seg不为SEGMENT_REG_TSG/SYS_SEGMENT_REG_IDTR/SEGMENT_REG_HS/SEGMENT_REG_LS
-         * 	     且tc->readMiscRegNoEffect(MISCREG_SEG_SEL(seg))为false
-         *			return std::make_shared<GeneralProtection>(0);
-         *		 bool expandDown = false;
-         *		 SegAttr attr = tc->readMiscRegNoEffect(MISCREG_SEG_ATTR(seg));
-         *		 如果seg大于SEGMENT_REG_ES且同时小于SEGMENT_REG_HS,do protection/limit checks
-         *		 	{...}(内容过于复杂，暂时无法一下子理解清楚。。。)
-         *		 如果m5Reg.submode不等于SixtyFourBitMode或flags&(AddrSizeFlagBit<<FlagShift)true
-         *		 	vaddr &= mask(32);(mask(32)返回64位二进制数，前32位0，后32位1)
-         *		 如果m5Reg.paging为true，那么执行translation
-         *			TlbEntry *entry = lookup(vaddr);//LRU的seq num +1，返回entry
-         *          如果entry为NULL//根据lookup()分析可得
-         *				如果是FullSystem模式
-         *					Fault fault = walker->start(tc, translation, req, mode);
-         *					如果timing或fault!=Nofault时
-         *						那么delayedResponse=true
-         *						return fault
-         *					再次令entry = lookup(vaddr);//没啥用啊，梳理的时候再看看
-         *				否则
-         *					Process *p = tc->getProcessPtr();
-         *					声明TlbEntry newEntry;
-         *					bool success = p->pTable->lookup(vaddr, newEntry);
-         *					如果success为false且mode不是execute(fetch stage调用时是execute)
-         *						如果p->fixupStackFault(vaddr)为true
-         *							那么success = p->pTable->lookup(vaddr, newEntry);
-         *							寻找在新的page页中寻找entry
-         *						如果success为false
-         *							return std::make_shared<PageFault>(vaddr, true, mode,
-                                                           true, false);
-         *						否则
-         *							Addr alignedVaddr = p->pTable->pageAlign(vaddr);
-         *							entry = insert(alignedVaddr, newEntry);
-         *          bool inUser = (m5Reg.cpl == 3 && !(flags & (CPL0FlagBit << FlagShift)));
-            		CR0 cr0 = tc->readMiscRegNoEffect(MISCREG_CR0);
-            		//按照注释上的解释是paging protection checks
-         *          如果(inUser为true且entry的user为false)或(mode为write且badWrite为true)时
-         *          	return std::make_shared<PageFault>(vaddr, true, mode, inUser,false);
-         *          如果storeCheck为true且badWrite为true
-         *          	Addr paddr = entry->paddr | (vaddr & mask(entry->logBytes));
-         *              req->setPaddr(paddr);
-         *			如果entry->uncacheable为true
-         *				req->setFlags(Request::UNCACHEABLE | Request::STRICT_ORDER);
-         *		否则，req->setPaddr(vaddr);
-         *	return return finalizePhysical(req, tc, mode);
-         */
+
         // If paging is enabled, do the translation.
         if (m5Reg.paging) {
             DPRINTF(TLB, "Paging enabled.\n");

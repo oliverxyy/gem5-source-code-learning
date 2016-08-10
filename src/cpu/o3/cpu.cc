@@ -533,14 +533,41 @@ FullO3CPU<Impl>::regStats()
         .prereq(miscRegfileWrites);
 }
 
+
+/*
+ *
+ * void:tick()
+ * FullO3CPU主函数
+ *
+ */
 template <class Impl>
 void
 FullO3CPU<Impl>::tick()
 {
+	/*
+	 * 记录trace信息
+	 * assert是宏，定义位于/usr/include/assert.h
+	 * 用于debug模式，断言失败时输出错误信息并且终止程序运行
+	 * 使用两条断言，断言只在debug模式下起作用
+	 * 第一条断言条件是!switchedOut()，函数位于cpu/base.hh
+	 * 当CPU是switch out状态时为true，!switchedOut()==false
+	 * 当CPU是active状态时为false，!switchedOut()==true
+	 * 第二条断言条件是getDrainState() != Drainable::Drained
+	 * getDrainState()函数位于sim/drain.hh
+	 * Drainable类的成员变量State为enum类型：Running/Draining/Drained
+	 * 当_drainState为Drained时，条件为false，输出错误信息并终止程序运行
+	 * 当_drainState为Running/Draining时，条件为true
+	 *
+	 */
     DPRINTF(O3CPU, "\n\nFullO3CPU: Ticking main, FullO3CPU.\n");
     assert(!switchedOut());
     assert(getDrainState() != Drainable::Drained);
-
+    /*
+     * Stats::Scalar numCycles
+     * numCycles是CPU simulated cycle的number
+     * 每调用一次FullO3CPU<Impl>::tick()的方法就+1
+     *
+     */
     ++numCycles;
     ppCycles->notify(1);
 
@@ -548,7 +575,7 @@ FullO3CPU<Impl>::tick()
 
     //Tick each of the stages
     fetch.tick();
-
+    
     decode.tick();
 
     rename.tick();

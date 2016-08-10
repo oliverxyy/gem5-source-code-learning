@@ -649,10 +649,12 @@ DefaultFetch<Impl>::fetchCacheLine(Addr vaddr, ThreadID tid, Addr pc)
     return true;
 }
 
+
 template <class Impl>
 void
 DefaultFetch<Impl>::finishTranslation(const Fault &fault, RequestPtr mem_req)
 {
+	//
     ThreadID tid = mem_req->threadId();
     Addr fetchBufferBlockPC = mem_req->getVaddr();
 

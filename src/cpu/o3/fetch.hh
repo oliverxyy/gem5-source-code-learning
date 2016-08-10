@@ -98,7 +98,11 @@ class DefaultFetch
         void
         markDelayed()
         {}
-
+		/*
+		 * void:finish
+		 * 调用fetch->finishTranslation(fault, req)函数
+		 * 删除this指针
+		 */
         void
         finish(const Fault &fault, RequestPtr req, ThreadContext *tc,
                BaseTLB::Mode mode)
