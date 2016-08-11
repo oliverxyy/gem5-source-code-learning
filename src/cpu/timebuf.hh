@@ -174,7 +174,11 @@ class TimeBuffer
     {
         return _id;
     }
-
+    /*
+     * void:advance
+     *
+     *
+     */
     void
     advance()
     {

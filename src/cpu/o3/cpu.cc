@@ -151,7 +151,27 @@ FullO3CPU<Impl>::TickEvent::description() const
 {
     return "FullO3CPU tick";
 }
-
+/*
+ * FullO3CPU()
+ * 构造函数，负责初始化
+ * DerivO3CPUParams定义位于params/DerivO3CPUParams.hh
+ * 初始化BaseO3CPU
+ * 初始化itb
+ * 初始化dtb
+ * 初始化tickEvent
+ * 如果是非debug模式(即release)，则不声明定义instcount；
+ * 如果是debug模式，则声明定义instcount，初始化为0
+ * removeInstsThisCycle用于标记这个cycle的指令需不需要被remove
+ * 初始化removeInstsThisCycle为false，即不需要
+ * 初始化fetch
+ * 初始化decode
+ * 初始化rename
+ * 初始化iew
+ * 初始化commit
+ *
+ *
+ *
+ */
 template <class Impl>
 FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     : BaseO3CPU(params),
@@ -546,6 +566,8 @@ FullO3CPU<Impl>::tick()
 {
 	/*
 	 * 记录trace信息
+	 * DPRINTF()函数位于base/trace.hh，作用是记录运行信息
+	 *
 	 * assert是宏，定义位于/usr/include/assert.h
 	 * 用于debug模式，断言失败时输出错误信息并且终止程序运行
 	 * 使用两条断言，断言只在debug模式下起作用
@@ -564,8 +586,20 @@ FullO3CPU<Impl>::tick()
     assert(getDrainState() != Drainable::Drained);
     /*
      * Stats::Scalar numCycles
-     * numCycles是CPU simulated cycle的number
-     * 每调用一次FullO3CPU<Impl>::tick()的方法就+1
+     * numCycles是标记CPU simulated cycle的number
+     * 每调用一次FullO3CPU<Impl>::tick()的方法就++numCycles
+     *
+     * ppCycles的定义位于cpu/base.hh，为PMUUPtr类型
+     * PMUUPtr实际上是unique_ptr<PMU>，定义在sim/probe/pmu.hh
+     * PMU的类型是ProbePointArg<uint64_t>，也定义在sim/probe/pmu.hh
+     * ProbePointArg定义在sim/probe/probe.hh
+     * ppCycles->notify(1)实际上调用ProbePointArg的notify方法
+     * 方法作用是遍历vector<ProbeListenerArgBase<Arg> *> listeners，
+     * 并调用listener的ProbeListenerArgBase的notify()方法
+     * 然而ProbeListenerArgBase的notify方法是虚函数
+     * 因而看其子类ProbeListenerArgBase的实现
+     * 子类的notify方法里面比较复杂，需要找到实例进行分析
+     * 最后总结推测，ppCycles->notify(1)的作用是唤醒PMU的listener
      *
      */
     ++numCycles;
@@ -574,6 +608,23 @@ FullO3CPU<Impl>::tick()
 //    activity = false;
 
     //Tick each of the stages
+    /*
+     * fetch等变量的定义位于cpu/o3/cpu.hh
+     * Fetch等变量的定义位于cpu/o3/cpu_policy.hh
+     *
+     * 调用fetch_impl.hh中DefaultFetch的tick()方法
+     * 调用decode_impl.hh中DefaultDecode的tick()方法
+     * 调用rename_impl.hh中DefaultRename的tick()方法
+     * 调用iew_impl.hh中DefaultIEW的tick()方法
+     * 调用commit_impl.hh中DefaultCommit的tick()方法
+     *
+     * 调用fetch stage主方法
+     * 调用decode stage主方法
+     * 调用rename stage主方法
+     * 调用iew stage主方法
+     * 调用commit stage主方法
+     *
+     */
     fetch.tick();
     
     decode.tick();
@@ -585,6 +636,9 @@ FullO3CPU<Impl>::tick()
     commit.tick();
 
     // Now advance the time buffers
+    //timeBuffer的定义位于cpu/o3/cpu.hh
+    //TimeBuffer类的定义位于cpu/timebuf.hh
+    //advance方法
     timeBuffer.advance();
 
     fetchQueue.advance();
