@@ -130,7 +130,7 @@ struct DerivO3CPUParams
     unsigned SSITSize;
     unsigned activity;
     unsigned backComSize;
-    BPredU	nit * branchPred;
+    BPredUnit * branchPred;
     unsigned cachePorts;
     Cycles commitToDecodeDelay;
     Cycles commitToFetchDelay;
