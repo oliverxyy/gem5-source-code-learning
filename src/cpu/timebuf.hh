@@ -137,6 +137,14 @@ class TimeBuffer
 
 
   public:
+    /*
+     * TimeBuffer(int,int):带参数的构造函数
+     * 分析变量的初始化以及断言条件可知，past>=0且future>=0
+     * 则size>=1，index=0，base=0
+     * for循环作用是给index分配连续的size个大小为sizeof(T)的空间，并初始化为0
+     * index类型为vector<char *>,每个char *都指向一个大小为sizeof(T)的空间，初始值都为0
+     * 另外令_id = -1,含义待定，推测是标志符
+     */
     TimeBuffer(int p, int f)
         : past(p), future(f), size(past + future + 1), 
           data(new char[size * sizeof(T)]), index(size), base(0)
@@ -176,7 +184,8 @@ class TimeBuffer
     }
     /*
      * void:advance
-     *
+     * 如果base+1>=size，那么令base=0
+     * 根据构造函数
      *
      */
     void
