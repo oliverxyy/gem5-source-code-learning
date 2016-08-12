@@ -1,47 +1,47 @@
 /*
- * Copyright (c) 2011-2012, 2014 ARM Limited
- * Copyright (c) 2013 Advanced Micro Devices, Inc.
- * All rights reserved
+Copyright (c) 2011-2012, 2014 ARM Limited
+Copyright (c) 2013 Advanced Micro Devices, Inc.
+All rights reserved
  *
- * The license below extends only to copyright in the software and shall
- * not be construed as granting a license to any other intellectual
- * property including but not limited to intellectual property relating
- * to a hardware implementation of the functionality of the software
- * licensed hereunder.  You may use the software subject to the license
- * terms below provided that you ensure that this notice is replicated
- * unmodified and in its entirety in all distributions of the software,
- * modified or unmodified, in source code or in binary form.
+The license below extends only to copyright in the software and shall
+not be construed as granting a license to any other intellectual
+property including but not limited to intellectual property relating
+to a hardware implementation of the functionality of the software
+licensed hereunder.  You may use the software subject to the license
+terms below provided that you ensure that this notice is replicated
+unmodified and in its entirety in all distributions of the software,
+modified or unmodified, in source code or in binary form.
  *
- * Copyright (c) 2004-2006 The Regents of The University of Michigan
- * Copyright (c) 2011 Regents of the University of California
- * All rights reserved.
+Copyright (c) 2004-2006 The Regents of The University of Michigan
+Copyright (c) 2011 Regents of the University of California
+All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer;
- * redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution;
- * neither the name of the copyright holders nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met: redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer;
+redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution;
+neither the name of the copyright holders nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Authors: Kevin Lim
- *          Korey Sewell
- *          Rick Strong
+Authors: Kevin Lim
+         Korey Sewell
+         Rick Strong
  */
 
 #include "arch/kernel_stats.hh"
@@ -153,127 +153,133 @@ FullO3CPU<Impl>::TickEvent::description() const
 }
 /*
  * FullO3CPU()
+ * FullO3CPU(FullSystem out of order CPU core simulation)
+ * FS模式的乱序CPU core
  *
- * 根据参数初始化BaseO3CPU、itb、dtb、tickEvent
- * 定义removeInstsThisCycle标识符
- * 根据参数初始化fetch、decode、rename、iew、commit类，给某些成员变量赋值
- * 根据参数初始化regFile、freeList、rob、scoreboard、IcachePort、DcachePort
- * 根据参数初始化timeBuffer和各stage的fetchQueue等Queue
- * 给各stage传入相应的参数
- * 初始化renameMap、commitrenameMap(架构寄存器到物理寄存器的映射)
+
+
+
+
+
+
+
+
+
  *
- * 构造函数，负责初始化
- * DerivO3CPUParams定义位于params/DerivO3CPUParams.hh
- * 根据参数初始化BaseO3CPU
- * 根据参数初始化itb(定义与实现位于arch/X86/tlb.hh|tlb.cc)
- * 根据参数初始化dtb(同上，都是TLB类)
- * 初始化tickEvent,参数为this
- * 如果是非debug模式(即release)，则不声明定义instcount；
- * 如果是debug模式，则声明定义instcount，初始化为0
- * removeInstsThisCycle用于标记这个cycle的指令需不需要被remove
- * 初始化removeInstsThisCycle为false，即不需要
- * 根据参数初始化fetch
- * 根据参数初始化decode
- * 根据参数初始化rename
- * 根据参数初始化iew
- * 根据参数初始化commit
- * 根据参数初始化regFile(初始化register file成员变量),定义于cpu/o3/regfile.cc
- * 根据参数初始化freeList,定义于cpu/o3/free_list.hh|free_list.cc
- * 实际上调用的是cpu/o3/regfile.cc的initFreeList，初始化register free list
- * 根据参数初始化rob(re-order buffer)，定义于cpu/o3/rob.hh|rob_impl.hh
- * 根据参数初始化scoreboard，定义于cpu/o3/scoreboard.hh|scoreboard.cc
- * 记录各种register的状态参数，比如数量，ready，总量，index等等
- * 根据参数初始化numThreads个ISA为NULL，定义于arch/X86/isa.hh|isa.cc，numThreads为单核线程数
- * 根据参数初始化IcachePort(for fetching instruction)，定义于cpu/o3/cpu.hh
- * 根据参数初始化dcachePort(for load/store queue),定义于cpu/o3/cpu.hh
- * 根据参数初始化timeBuffer(和后面交流的主time buffer),分配空间，定义于cpu/timebuf.hh
- * 根据参数初始化fetchQueue(fetch stage的IQ),分配空间，类型是TimeBuffer
- * 根据参数初始化decodeQueue(fetch stage的IQ),分配空间，类型是TimeBuffer
- * 根据参数初始化renameQueue(fetch stage的IQ),分配空间，类型是TimeBuffer
- * 根据参数初始化iewueue(fetch stage的IQ),分配空间，类型是TimeBuffer
- * 根据参数初始化activityRec(初始化成员)，定义于cpu/activity.hh|activity.cc
- * 功能上主要是告知cpu activities的状态
- * 初始化globalSeqNum为1，globalSeqNum是instruction全局计数器
- * 根据参数初始化system，传入模拟系统的基本配置参数，定义位于sim/system.hh|system.cc
- * 初始化drainManager(track所有currently draining的simObject)为NULL
- * 初始化lastRunningCycle(记录上一个运行的Cycle数)为当前Cycle数
+如果params参数的switched_out为false，那么_status(CPU的状态标识符)为Running
+否则，_status=SwitchedOut
+如果params参数中checker不为NULL，那么实例化Checker(作用类比Oracle/Check)
+传入IcachePort和System参数
+否则，checker为NULL
+如果FullSystem为false，即非FullSystem模式运行，则改变thread和tids的大小为numThreads
  *
- * 如果params参数的switched_out为false，那么_status(CPU的状态标识符)为Running
- * 否则，_status=SwitchedOut
- * 如果params参数中checker不为NULL，那么实例化Checker(作用类比Oracle/Check)
- * 传入IcachePort和System参数
- * 否则，checker为NULL
- * 如果FullSystem为false，即非FullSystem模式运行，则改变thread和tids的大小为numThreads
+给fetch stage传入activeThreads list引用
+给decode stage传入activeThreads list引用
+给rename stage传入activeThreads list引用
+给iew stage传入activeThreads list引用
+给commit stage传入activeThreads list引用
  *
- * 给fetch stage传入activeThreads list引用
- * 给decode stage传入activeThreads list引用
- * 给rename stage传入activeThreads list引用
- * 给iew stage传入activeThreads list引用
- * 给commit stage传入activeThreads list引用
+给fetch stage传入timeBuffer引用
+给decode stage传入timeBuffer引用
+给rename stage传入timeBuffer引用
+给iew stage传入timeBuffer引用
+给commit stage传入timeBuffer引用
  *
- * 给fetch stage传入timeBuffer引用
- * 给decode stage传入timeBuffer引用
- * 给rename stage传入timeBuffer引用
- * 给iew stage传入timeBuffer引用
- * 给commit stage传入timeBuffer引用
+给fetch stage传入fetchQueue引用
+给decode stage传入fetchQueue引用
+给commit stage传入fetchQueue引用
+给decode stage传入decodeQueue引用
+给rename stage传入decodeQueue引用
+给rename stage传入renameQueue引用
+给iew stage传入renameQueue引用
+给iew stage传入iewQueue引用
+给commit stage传入iewQueue引用
+给commit stage传入renameQueue引用
  *
- * 给fetch stage传入fetchQueue引用
- * 给decode stage传入fetchQueue引用
- * 给commit stage传入fetchQueue引用
- * 给decode stage传入decodeQueue引用
- * 给rename stage传入decodeQueue引用
- * 给rename stage传入renameQueue引用
- * 给iew stage传入renameQueue引用
- * 给iew stage传入iewQueue引用
- * 给commit stage传入iewQueue引用
- * 给commit stage传入renameQueue引用
+给commit stage传入iew引用
+给rename stage传入iew引用
+给rename stage传入commit引用
  *
- * 给commit stage传入iew引用
- * 给rename stage传入iew引用
- * 给rename stage传入commit引用
+定义类型为ThreadID的active_threads
+如果是FullSystem,那么active_threads=1
+否则active_threads = params->workload.size()
+	  且如果active_threads>MaxThreads时，输出错误信息并退出
  *
- * 定义类型为ThreadID的active_threads
- * 如果是FullSystem,那么active_threads=1
- * 否则active_threads = params->workload.size()
- * 	  且如果active_threads>MaxThreads时，输出错误信息并退出
+断言如果传入参数的物理int型寄存器配置小于单核线程数*ISA中NumIntRegs的配置，则退出
+断言如果传入参数的物理Float型寄存器配置小于单核线程数*ISA中NumFloatRegs的配置，则退出
+断言如果传入参数的物理CC(condition code)型寄存器配置小于单核线程数*ISA中NumCCRegs的配置，则退出
  *
- * 断言如果传入参数的物理int型寄存器配置小于单核线程数*ISA中NumIntRegs的配置，则退出
- * 断言如果传入参数的物理Float型寄存器配置小于单核线程数*ISA中NumFloatRegs的配置，则退出
- * 断言如果传入参数的物理CC(condition code)型寄存器配置小于单核线程数*ISA中NumCCRegs的配置，则退出
+传入rename stage scoreboard的引用
+传入iew stage scoreboard的引用
+对单核中所有线程中的commitRenameMap和renameMap执行init方法进行初始化
+commitRenameMap和renameMap都是RenameMap类型，实现架构寄存器到物理寄存器的映射
  *
- * 传入rename stage scoreboard的引用
- * 传入iew stage scoreboard的引用
- * 对单核中所有线程中的commitRenameMap和renameMap执行init方法进行初始化
- * commitRenameMap和renameMap都是RenameMap类型，实现架构寄存器到物理寄存器的映射
+对每个活动线程设置架构寄存器到物理寄存器的映射
+int,float,cc三种类型分别进行映射
  *
- * 对每个活动线程设置架构寄存器到物理寄存器的映射
- * int,float,cc三种类型分别进行映射
+给rename stage传入配置好映射的renameMap
+给commit stage传入配置好映射的commitRenameMap
+给rename stage传入freeList(内有空闲的register list)引用
  *
- * 给rename stage传入配置好映射的renameMap
- * 给commit stage传入配置好映射的commitRenameMap
- * 给rename stage传入freeList(内有空闲的register list)引用
+给commit stage传入ROB
+初始化lastActivatedCycle(标记上一个活动状态的Cycle)为0
  *
- * 给commit stage传入ROB
- * 初始化lastActivatedCycle(标记上一个活动状态的Cycle)为0
+调试代码，已被弃用(if 0)
+记录运行信息("")
  *
- * 调试代码，已被弃用(if 0)
- * 记录运行信息("")
+初始化thread(vector容器，存储线程)并给分配numThreads的大小
+遍历单核中所有线程：
+   如果是FullSystem(FullSystem模式暂时不支持超线程，所以还是一核一线程)
+   	 断言numThreads==1，否则输出信息退出
+      给每个线程实例化一个Thread，第三个参数process为NULL
+   如果是非FullSystem模式(SE模式，支持超线程，所以numThreads>=1)
+   	 如果tid<params->workload.size()(传入的配置参数)
+   	 	记录运行信息
+   	 	对每个线程进行实例化
+   	 否则
+   	 	对每个线程进行实例化时，将第三个参数process设置为NULL
+   tc是指向ThreadContext的指针，ThreadContext提供所有thread state的公共接口
+   声明并实例化O3ThreadContext<Impl> *类型的o3_tc
+   令tc = o3_tc，会让tc的指针指向O3ThreadContext<Impl>
+	  这样tc可以就访问O3ThreadContext<Impl>的所有方法(多态)
+	  如果传入的参数中checker不为NULL
+	  	则令tc指向CheckerThreadContext<O3ThreadContext<Impl> >的实例
+	  令o3_tc的cpu成员变量等于Impl::O3CPU *的this(原类型为FullO3CPU)
+	  断言o3_tc的成员变量cpu不为NULL，否则输出信息退出
+	  令o3_tc的thread等于当前线程
+	  如果是FullSystem
+	  	 那么当前线程的quiesceEvent赋值为EndQuiesceEvent(tc)
+	  	 EndQuiesceEvent的定义位于cpu/quiesce_event.hh|quiesce_event.cc
+	  	 EndQuiesceEvent作用是timing out静默指令
+ *	  给当前线程的成员变量tc赋值，赋值tc(前面刚实例化的)
+   将tc添加到当前cpu的成员变量threadContexts的队列中去
+如果传入参数中switched_out为false且ISA配置中interrupts为false，
+   那么说明没有载入中断控制，输出错误信息并退出
+遍历当前线程
+   设置当前线程的funcExeInst(记录已经执行的指令数)为0
+   setFuncExeInst定义于cpu/thread_state.hh
  *
- * 初始化thread(vector容器，存储线程)并给分配numThreads的大小
- * 遍历单核中所有线程：
- *    如果是FullSystem(FullSystem模式暂时不支持超线程，所以还是一核一线程)
- *    	 断言numThreads==1，否则输出信息退出
- *       给每个线程实例化一个Thread，第三个参数process为NULL
- *    如果是非FullSystem模式(SE模式，支持超线程，所以numThreads>=1)
- *    	 如果tid<params->workload.size()(传入的配置参数)
- *    	 	记录运行信息
- *    	 	对每个线程进行实例化
- *    	 否则
- *    	 	对每个线程进行实例化时，将第三个参数process设置为NULL
  *
  */
 template <class Impl>
 FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
+/*
+ * 根据配置初始化BaseO3CPU、itb、dtb、tickEvent
+ * debug模式会执行的调试代码
+ * 初始化removeInstsThisCycle为false
+ *
+ * params是模拟器的配置参数列表
+ * DerivO3CPUParams定义位于params/DerivO3CPUParams.hh
+ * 根据配置初始化BaseO3CPU
+ * 根据配置初始化itb(定义与实现位于arch/X86/tlb.hh|tlb.cc)
+ * 根据配置初始化dtb(同上，都是TLB类)
+ * 初始化tickEvent,参数为this
+ * 如果是非debug模式(即release)，则不声明定义instcount；
+ * 如果是debug模式，则声明定义instcount，初始化为0
+ * removeInstsThisCycle用于标记这个cycle的指令需不需要被remove
+ * (如果是retired和squashed两种状态的话)参考自cpu/o3/cpu.hh英文注解
+ *
+ */
     : BaseO3CPU(params),
       itb(params->itb),
       dtb(params->dtb),
@@ -282,38 +288,75 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
       instcount(0),
 #endif
       removeInstsThisCycle(false),
+	  /*
+	   * 初始化fetch、decode、rename、iew、commit并加载基本配置信息
+	   *
+	   * 初始化fetch，并加载基本配置信息
+	   * 初始化decode，并加载基本配置信息
+	   * 初始化rename，并加载基本配置信息
+	   * 初始化iew，并加载基本配置信息
+	   * 初始化commit，并加载基本配置信息
+	   */
       fetch(this, params),
       decode(this, params),
       rename(this, params),
       iew(this, params),
       commit(this, params),
-
+	  /*
+	   * 初始化regFile、reg的freeList、rob和scoreboard
+	   *
+	   * 根据配置初始化regFile(初始化register file成员变量),定义于cpu/o3/regfile.cc
+	   * 根据配置初始化freeList,定义于cpu/o3/free_list.hh|free_list.cc
+	   * 实际上调用的是cpu/o3/regfile.cc的initFreeList，初始化register free list
+	   * 根据配置初始化rob(re-order buffer)，定义于cpu/o3/rob.hh|rob_impl.hh
+	   * 根据配置初始化scoreboard，定义于cpu/o3/scoreboard.hh|scoreboard.cc
+	   * 记录各种register的状态参数，比如数量，ready，总量，index等等
+	   */
       regFile(params->numPhysIntRegs,
               params->numPhysFloatRegs,
               params->numPhysCCRegs),
-
       freeList(name() + ".freelist", &regFile),
-
       rob(this, params),
-
       scoreboard(name() + ".scoreboard",
                  regFile.totalNumPhysRegs(), TheISA::NumMiscRegs,
                  TheISA::ZeroReg, TheISA::ZeroReg),
-
+	  /*
+	   * 初始化ISA类、icachePort和dcachePort
+	   *
+	   * 根据配置初始化numThreads个ISA为NULL，定义于arch/X86/isa.hh|isa.cc，numThreads为单核线程数
+	   * 根据配置初始化IcachePort(for fetching instruction)，定义于cpu/o3/cpu.hh
+	   * 根据配置初始化dcachePort(for load/store queue),定义于cpu/o3/cpu.hh
+	   */
       isa(numThreads, NULL),
-
       icachePort(&fetch, this),
       dcachePort(&iew.ldstQueue, this),
-
+	  /*
+	   * 根据配置初始化timeBuffer、fetchQueue、decodeQueue、renameQueue、iewueue
+	   *
+	   * 根据配置初始化timeBuffer(前后stage交流用的),分配空间，定义于cpu/timebuf.hh
+	   * 根据配置初始化fetchQueue(fetch stage的IQ),分配空间，类型是TimeBuffer
+	   * 根据配置初始化decodeQueue(fetch stage的IQ),分配空间，类型是TimeBuffer
+	   * 根据配置初始化renameQueue(fetch stage的IQ),分配空间，类型是TimeBuffer
+	   * 根据配置初始化iewueue(fetch stage的IQ),分配空间，类型是TimeBuffer
+	   */
       timeBuffer(params->backComSize, params->forwardComSize),
       fetchQueue(params->backComSize, params->forwardComSize),
       decodeQueue(params->backComSize, params->forwardComSize),
       renameQueue(params->backComSize, params->forwardComSize),
       iewQueue(params->backComSize, params->forwardComSize),
+	  /*
+	   * 根据配置初始化activityRec、globalSeqNum、system
+	   *
+根据配置初始化activityRec，定义于cpu/activity.hh|activity.cc
+功能主要是通知cpu activities的状态
+初始化globalSeqNum为1，globalSeqNum是instruction全局计数器
+根据配置初始化system(模拟的系统)，传入基本配置参数，定义位于sim/system.hh|system.cc
+初始化drainManager(track所有currently draining的simObject)为NULL
+初始化lastRunningCycle(记录上一个运行的Cycle数)为当前Cycle数
+	   */
       activityRec(name(), NumStages,
                   params->backComSize + params->forwardComSize,
                   params->activity),
-
       globalSeqNum(1),
       system(params->system),
       drainManager(NULL),
@@ -387,9 +430,9 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     }
 
     //Make Sure That this a Valid Architeture
-    assert(params->numPhysIntRegs   >= numThreads * TheISA::NumIntRegs);
-    assert(params->numPhysFloatRegs >= numThreads * TheISA::NumFloatRegs);
-    assert(params->numPhysCCRegs >= numThreads * TheISA::NumCCRegs);
+    assert(params->numPhysIntRegs   >= numThreadsTheISA::NumIntRegs);
+    assert(params->numPhysFloatRegs >= numThreadsTheISA::NumFloatRegs);
+    assert(params->numPhysCCRegs >= numThreadsTheISA::NumCCRegs);
 
     rename.setScoreboard(&scoreboard);
     iew.setScoreboard(&scoreboard);
@@ -455,31 +498,50 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     // Setup any thread state.
     this->thread.resize(this->numThreads);
     /*
-     * 对每个活动线程设置架构寄存器到物理寄存器的映射
-     * int,float,cc三种类型分别进行映射
+    对每个活动线程设置架构寄存器到物理寄存器的映射
+    int,float,cc三种类型分别进行映射
      *
-     * 给rename stage传入配置好映射的renameMap
-     * 给commit stage传入配置好映射的commitRenameMap
-     * 给rename stage传入freeList(内有空闲的register list)引用
+    给rename stage传入配置好映射的renameMap
+    给commit stage传入配置好映射的commitRenameMap
+    给rename stage传入freeList(内有空闲的register list)引用
      *
-     * 给commit stage传入ROB
-     * 初始化lastActivatedCycle(标记上一个活动状态的Cycle)为0
+    给commit stage传入ROB
+    初始化lastActivatedCycle(标记上一个活动状态的Cycle)为0
      *
-     * 调试代码，已被弃用(if 0)
-     * 记录运行信息("")
+    调试代码，已被弃用(if 0)
+    记录运行信息("")
      *
-     * 初始化thread(vector容器，存储线程)并给分配numThreads的大小
-     * 遍历单核中所有线程：
-     *    如果是FullSystem(FullSystem模式暂时不支持超线程，所以还是一核一线程)
-     *    	 断言numThreads==1，否则输出信息退出
-     *       给每个线程实例化一个Thread，第三个参数process为NULL
-     *    如果是非FullSystem模式(SE模式，支持超线程，所以numThreads>=1)
-     *    	 如果tid<params->workload.size()(传入的配置参数)
-     *    	 	记录运行信息
-     *    	 	对每个线程进行实例化
-     *    	 否则
-     *    	 	对每个线程进行实例化时，将第三个参数process设置为NULL
-     *
+    初始化thread(vector容器，存储线程)并给分配numThreads的大小
+    遍历单核中所有线程：
+       如果是FullSystem(FullSystem模式暂时不支持超线程，所以还是一核一线程)
+       	 断言numThreads==1，否则输出信息退出
+          给每个线程实例化一个Thread，第三个参数process为NULL
+       如果是非FullSystem模式(SE模式，支持超线程，所以numThreads>=1)
+       	 如果tid<params->workload.size()(传入的配置参数)
+       	 	记录运行信息
+       	 	对每个线程进行实例化
+       	 否则
+       	 	对每个线程进行实例化时，将第三个参数process设置为NULL
+       tc是指向ThreadContext的指针，ThreadContext提供所有thread state的公共接口
+       声明并实例化O3ThreadContext<Impl> *类型的o3_tc
+       令tc = o3_tc，会让tc的指针指向O3ThreadContext<Impl>
+    	  这样tc可以就访问O3ThreadContext<Impl>的所有方法(多态)
+    	  如果传入的参数中checker不为NULL
+    	  	则令tc指向CheckerThreadContext<O3ThreadContext<Impl> >的实例
+    	  令o3_tc的cpu成员变量等于Impl::O3CPU *的this(原类型为FullO3CPU)
+    	  断言o3_tc的成员变量cpu不为NULL，否则输出信息退出
+    	  令o3_tc的thread等于当前线程
+    	  如果是FullSystem
+    	  	 那么当前线程的quiesceEvent赋值为EndQuiesceEvent(tc)
+    	  	 EndQuiesceEvent的定义位于cpu/quiesce_event.hh|quiesce_event.cc
+    	  	 EndQuiesceEvent作用是timing out静默指令
+     *	  给当前线程的成员变量tc赋值，赋值tc(前面刚实例化的)
+       将tc添加到当前cpu的成员变量threadContexts的队列中去
+    如果传入参数中switched_out为false且ISA配置中interrupts为false，
+       那么说明没有载入中断控制，输出错误信息并退出
+    遍历当前线程
+       设置当前线程的funcExeInst(记录已经执行的指令数)为0
+       setFuncExeInst定义于cpu/thread_state.hh
      *
      *
      */
@@ -684,8 +746,8 @@ FullO3CPU<Impl>::regStats()
 
 /*
  *
- * void:tick()
- * FullO3CPU主函数
+void:tick()
+FullO3CPU主函数
  *
  */
 template <class Impl>
@@ -693,41 +755,41 @@ void
 FullO3CPU<Impl>::tick()
 {
 	/*
-	 * 记录trace信息
-	 * DPRINTF()函数位于base/trace.hh，作用是记录运行信息
+	记录trace信息
+	DPRINTF()函数位于base/trace.hh，作用是记录运行信息
 	 *
-	 * assert是宏，定义位于/usr/include/assert.h
-	 * 用于debug模式，断言失败时输出错误信息并且终止程序运行
-	 * 使用两条断言，断言只在debug模式下起作用
-	 * 第一条断言条件是!switchedOut()，函数位于cpu/base.hh
-	 * 当CPU是switch out状态时为true，!switchedOut()==false
-	 * 当CPU是active状态时为false，!switchedOut()==true
-	 * 第二条断言条件是getDrainState() != Drainable::Drained
-	 * getDrainState()函数位于sim/drain.hh
-	 * Drainable类的成员变量State为enum类型：Running/Draining/Drained
-	 * 当_drainState为Drained时，条件为false，输出错误信息并终止程序运行
-	 * 当_drainState为Running/Draining时，条件为true
+	assert是宏，定义位于/usr/include/assert.h
+	用于debug模式，断言失败时输出错误信息并且终止程序运行
+	使用两条断言，断言只在debug模式下起作用
+	第一条断言条件是!switchedOut()，函数位于cpu/base.hh
+	当CPU是switch out状态时为true，!switchedOut()==false
+	当CPU是active状态时为false，!switchedOut()==true
+	第二条断言条件是getDrainState() != Drainable::Drained
+	getDrainState()函数位于sim/drain.hh
+	Drainable类的成员变量State为enum类型：Running/Draining/Drained
+	当_drainState为Drained时，条件为false，输出错误信息并终止程序运行
+	当_drainState为Running/Draining时，条件为true
 	 *
 	 */
     DPRINTF(O3CPU, "\n\nFullO3CPU: Ticking main, FullO3CPU.\n");
     assert(!switchedOut());
     assert(getDrainState() != Drainable::Drained);
     /*
-     * Stats::Scalar numCycles
-     * numCycles是标记CPU simulated cycle的number
-     * 每调用一次FullO3CPU<Impl>::tick()的方法就++numCycles
+    Stats::Scalar numCycles
+    numCycles是标记CPU simulated cycle的number
+    每调用一次FullO3CPU<Impl>::tick()的方法就++numCycles
      *
-     * ppCycles的定义位于cpu/base.hh，为PMUUPtr类型
-     * PMUUPtr实际上是unique_ptr<PMU>，定义在sim/probe/pmu.hh
-     * PMU的类型是ProbePointArg<uint64_t>，也定义在sim/probe/pmu.hh
-     * ProbePointArg定义在sim/probe/probe.hh
-     * ppCycles->notify(1)实际上调用ProbePointArg的notify方法
-     * 方法作用是遍历vector<ProbeListenerArgBase<Arg> *> listeners，
-     * 并调用listener的ProbeListenerArgBase的notify()方法
-     * 然而ProbeListenerArgBase的notify方法是虚函数
-     * 因而看其子类ProbeListenerArgBase的实现
-     * 子类的notify方法里面比较复杂，需要找到实例进行分析
-     * 最后总结推测，ppCycles->notify(1)的作用是唤醒PMU的listener
+    ppCycles的定义位于cpu/base.hh，为PMUUPtr类型
+    PMUUPtr实际上是unique_ptr<PMU>，定义在sim/probe/pmu.hh
+    PMU的类型是ProbePointArg<uint64_t>，也定义在sim/probe/pmu.hh
+    ProbePointArg定义在sim/probe/probe.hh
+    ppCycles->notify(1)实际上调用ProbePointArg的notify方法
+    方法作用是遍历vector<ProbeListenerArgBase<Arg> *> listeners，
+    并调用listener的ProbeListenerArgBase的notify()方法
+    然而ProbeListenerArgBase的notify方法是虚函数
+    因而看其子类ProbeListenerArgBase的实现
+    子类的notify方法里面比较复杂，需要找到实例进行分析
+    最后总结推测，ppCycles->notify(1)的作用是唤醒PMU的listener
      *
      */
     ++numCycles;
@@ -737,20 +799,20 @@ FullO3CPU<Impl>::tick()
 
     //Tick each of the stages
     /*
-     * fetch等变量的定义位于cpu/o3/cpu.hh
-     * Fetch等变量的定义位于cpu/o3/cpu_policy.hh
+    fetch等变量的定义位于cpu/o3/cpu.hh
+    Fetch等变量的定义位于cpu/o3/cpu_policy.hh
      *
-     * 调用fetch_impl.hh中DefaultFetch的tick()方法
-     * 调用decode_impl.hh中DefaultDecode的tick()方法
-     * 调用rename_impl.hh中DefaultRename的tick()方法
-     * 调用iew_impl.hh中DefaultIEW的tick()方法
-     * 调用commit_impl.hh中DefaultCommit的tick()方法
+    调用fetch_impl.hh中DefaultFetch的tick()方法
+    调用decode_impl.hh中DefaultDecode的tick()方法
+    调用rename_impl.hh中DefaultRename的tick()方法
+    调用iew_impl.hh中DefaultIEW的tick()方法
+    调用commit_impl.hh中DefaultCommit的tick()方法
      *
-     * 调用fetch stage主方法
-     * 调用decode stage主方法
-     * 调用rename stage主方法
-     * 调用iew stage主方法
-     * 调用commit stage主方法
+    调用fetch stage主方法
+    调用decode stage主方法
+    调用rename stage主方法
+    调用iew stage主方法
+    调用commit stage主方法
      *
      */
     fetch.tick();
