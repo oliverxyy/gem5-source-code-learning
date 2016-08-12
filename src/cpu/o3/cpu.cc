@@ -345,7 +345,7 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
       renameQueue(params->backComSize, params->forwardComSize),
       iewQueue(params->backComSize, params->forwardComSize),
 	  /*
-	   * 根据配置初始化activityRec、globalSeqNum、system
+	   * 根据配置初始化activityRec、globalSeqNum、system、drainManager、lastRunningCycle
 	   *
 根据配置初始化activityRec，定义于cpu/activity.hh|activity.cc
 功能主要是通知cpu activities的状态
