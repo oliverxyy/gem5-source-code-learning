@@ -75,65 +75,84 @@
 
 using namespace std;
 /*
- * DefaultFetch<Impl>::DefaultFetch()
+DefaultFetch<Impl>::DefaultFetch()
+DefaultFetch的构造函数，初始化成员变量
  *
- * 初始化cpu实例
- * 初始化各stage之间的时延
- * 初始化各种标志位和线程、缓存、队列等大小
- * 判断各种边界参数，输出错误信息并退出
- * 判断获取fetchPolicy，即fetch操作的类型
- * 给各线程的decoder、fetch buffer等分配实例和空间
  *
- * 初始化cpu,引用FullO3CPU
- * 参数类定义于params/DerivO3CPU.hh
- * 根据参数初始化decodeToFetchDelay(decode到fetch的时延，下义同)
- * 根据参数初始化renameToFetchDelay
- * 根据参数初始化iewToFetchDelay
- * 根据参数初始化commitToFetchDelay
- * 根据参数初始化fetchWidth(fetch的最大指令数，下义同)
- * 根据参数初始化decodeWidth
- * 初始化retryPkt，值为NULL
- * 初始化retryTid，值为-1
- * 初始化cacheBlkSize，值是System类的cache line size，位于sim/system.hh|system.cc
- * 结合FullO3CPU类的构造函数来看，System初始化时会从参数中获取cache_line_size
- * 根据参数初始化fetchBufferSize(fetch buffer的大小，可能会比cache line小,单位byte)
- * 初始化fetchBufferMask(将fetch address修正到fetch buffer边界内)
- * 根据参数初始化fetchQueueSize(存储微操作的fetch queue大小)
- * 根据参数初始化numThreads(线程的数量)
- * 根据参数初始化numFetchingThreads(正在进行fetching操作的线程)
- * 初始化finishTranslationEvent(延迟translation faults生成的事件 )
+
+
+
+
+
+
+初始化retryTid，值为-1
+初始化cacheBlkSize，值是System类的cache line size，位于sim/system.hh|system.cc
+结合FullO3CPU类的构造函数来看，System初始化时会从参数中获取cache_line_size
+根据配置初始化fetchBufferSize(fetch buffer的大小，可能会比cache line小,单位byte)
+初始化fetchBufferMask(将fetch address修正到fetch buffer边界内)
+根据配置初始化fetchQueueSize(存储微操作的fetch queue大小)
+根据配置初始化numThreads(线程的数量)
+根据配置初始化numFetchingThreads(正在进行fetching操作的线程)
+初始化finishTranslationEvent(延迟translation faults生成的事件 )
  *
- * 如果numThreads>MaxThreads,输出错误信息并退出(定义位于base/misc.hh)
- * 如果fetchWidth>MaxWidth,输出错误信息并退出
- * 如果fetchBufferSize>cacheBlkSize,输出错误信息并退出
- * 如果cacheBlkSize>fetchBufferSize,输出错误信息并退出
+如果numThreads>MaxThreads,输出错误信息并退出(定义位于base/misc.hh)
+如果fetchWidth>MaxWidth,输出错误信息并退出
+如果fetchBufferSize>cacheBlkSize,输出错误信息并退出
+如果cacheBlkSize>fetchBufferSize,输出错误信息并退出
  *
- * 获取参数中的smtFetchPolicy
- * 字符串的字母全部转化为小写字母
- * 根据字符串的值初始化fetchPolicy
- * (SingleThread/roundrobin/Branch/iqcount/lsqcount)
- * 获取instruction的大小
- * 初始化每个线程的decoder、fetchBuffer、fetchBufferPC、fetchBufferValid
- * fetchBufferPC的值是fetch buffer中第一个指令的address
- * fetchBufferValid用来标记fetch buffer中值是否有效
- * 根据参数初始化BPredUnit(branch predictor,类定义于cpu/pred/bpred_unit.hh)
+获取参数中的smtFetchPolicy
+字符串的字母全部转化为小写字母
+根据字符串的值初始化fetchPolicy
+(SingleThread/roundrobin/Branch/iqcount/lsqcount)
+获取instruction的大小
+初始化每个线程的decoder、fetchBuffer、fetchBufferPC、fetchBufferValid
+fetchBufferPC的值是fetch buffer中第一个指令的address
+fetchBufferValid用来标记fetch buffer中值是否有效
+根据配置初始化BPredUnit(branch predictor,类定义于cpu/pred/bpred_unit.hh)
  *
- * 给每个decoder线程分配decoder实例
- * 给每个线程的fetch buffer分配uint8_t[fetchBufferSize]大小的空间
+给每个decoder线程分配decoder实例
+给每个线程的fetch buffer分配uint8_t[fetchBufferSize]大小的空间
  *
  */
 template<class Impl>
 DefaultFetch<Impl>::DefaultFetch(O3CPU *_cpu, DerivO3CPUParams *params)
+	  /*
+	   * 根据配置初始化cpu成员变量
+	   *
+	   * 初始化cpu,引用FullO3CPU
+	   * 参数类定义于params/DerivO3CPU.hh
+	   */
     : cpu(_cpu),
+	  /*
+	   * 根据配置初始化各stage之间的时延
+	   *
+	   * 根据配置初始化decodeToFetchDelay(decode到fetch的时延，下义同)
+	   * 根据配置初始化renameToFetchDelay
+	   * 根据配置初始化iewToFetchDelay
+	   * 根据配置初始化commitToFetchDelay
+	   */
       decodeToFetchDelay(params->decodeToFetchDelay),
       renameToFetchDelay(params->renameToFetchDelay),
       iewToFetchDelay(params->iewToFetchDelay),
       commitToFetchDelay(params->commitToFetchDelay),
+	  /*
+	   * 根据配置初始化fetch和decode的最大指令数
+	   *
+	   * 根据配置初始化fetchWidth(fetch的最大指令数，下义同)
+	   * 根据配置初始化decodeWidth
+	   */
       fetchWidth(params->fetchWidth),
       decodeWidth(params->decodeWidth),
 	  //类型为Packet指针
 	  //Packet是用于存储系统(e.g.L1,L2 cache)之间交换被封装好的数据包
 	  //Packet类位于mem/packet.hh中
+	  /*
+	   * 初始化retryPkt(要被重新发送的数据包)
+	   *
+	   * 初始化retryPkt，值为NULL
+	   *
+	   *
+	   */
       retryPkt(NULL),
 	  //类型为int16_t，定义于fetch.hh和base/types.hh
 	  //等待cache告知fetch需要retry的线程ID

@@ -470,6 +470,7 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
      * Debug模式执行的调试代码
      * 记录运行信息
      * 分配thread的线程队列大小
+     *
      * 给commit stage传入ROB
      * 初始化lastActivatedCycle(标记上一个活动状态的Cycle)为0
      * 调试代码，已被弃用(if 0)
