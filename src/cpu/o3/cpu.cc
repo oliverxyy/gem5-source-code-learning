@@ -156,108 +156,6 @@ FullO3CPU<Impl>::TickEvent::description() const
  * FullO3CPU(FullSystem out of order CPU core simulation)
  * FS模式的乱序CPU core
  *
-
-
-
-
-
-
-
-
-
- *
-如果params参数的switched_out为false，那么_status(CPU的状态标识符)为Running
-否则，_status=SwitchedOut
-如果params参数中checker不为NULL，那么实例化Checker(作用类比Oracle/Check)
-传入IcachePort和System参数
-否则，checker为NULL
-如果FullSystem为false，即非FullSystem模式运行，则改变thread和tids的大小为numThreads
- *
-给fetch stage传入activeThreads list引用
-给decode stage传入activeThreads list引用
-给rename stage传入activeThreads list引用
-给iew stage传入activeThreads list引用
-给commit stage传入activeThreads list引用
- *
-给fetch stage传入timeBuffer引用
-给decode stage传入timeBuffer引用
-给rename stage传入timeBuffer引用
-给iew stage传入timeBuffer引用
-给commit stage传入timeBuffer引用
- *
-给fetch stage传入fetchQueue引用
-给decode stage传入fetchQueue引用
-给commit stage传入fetchQueue引用
-给decode stage传入decodeQueue引用
-给rename stage传入decodeQueue引用
-给rename stage传入renameQueue引用
-给iew stage传入renameQueue引用
-给iew stage传入iewQueue引用
-给commit stage传入iewQueue引用
-给commit stage传入renameQueue引用
- *
-给commit stage传入iew引用
-给rename stage传入iew引用
-给rename stage传入commit引用
- *
-定义类型为ThreadID的active_threads
-如果是FullSystem,那么active_threads=1
-否则active_threads = params->workload.size()
-	  且如果active_threads>MaxThreads时，输出错误信息并退出
- *
-断言如果传入参数的物理int型寄存器配置小于单核线程数*ISA中NumIntRegs的配置，则退出
-断言如果传入参数的物理Float型寄存器配置小于单核线程数*ISA中NumFloatRegs的配置，则退出
-断言如果传入参数的物理CC(condition code)型寄存器配置小于单核线程数*ISA中NumCCRegs的配置，则退出
- *
-传入rename stage scoreboard的引用
-传入iew stage scoreboard的引用
-对单核中所有线程中的commitRenameMap和renameMap执行init方法进行初始化
-commitRenameMap和renameMap都是RenameMap类型，实现架构寄存器到物理寄存器的映射
- *
-对每个活动线程设置架构寄存器到物理寄存器的映射
-int,float,cc三种类型分别进行映射
- *
-给rename stage传入配置好映射的renameMap
-给commit stage传入配置好映射的commitRenameMap
-给rename stage传入freeList(内有空闲的register list)引用
- *
-给commit stage传入ROB
-初始化lastActivatedCycle(标记上一个活动状态的Cycle)为0
- *
-调试代码，已被弃用(if 0)
-记录运行信息("")
- *
-初始化thread(vector容器，存储线程)并给分配numThreads的大小
-遍历单核中所有线程：
-   如果是FullSystem(FullSystem模式暂时不支持超线程，所以还是一核一线程)
-   	 断言numThreads==1，否则输出信息退出
-      给每个线程实例化一个Thread，第三个参数process为NULL
-   如果是非FullSystem模式(SE模式，支持超线程，所以numThreads>=1)
-   	 如果tid<params->workload.size()(传入的配置参数)
-   	 	记录运行信息
-   	 	对每个线程进行实例化
-   	 否则
-   	 	对每个线程进行实例化时，将第三个参数process设置为NULL
-   tc是指向ThreadContext的指针，ThreadContext提供所有thread state的公共接口
-   声明并实例化O3ThreadContext<Impl> *类型的o3_tc
-   令tc = o3_tc，会让tc的指针指向O3ThreadContext<Impl>
-	  这样tc可以就访问O3ThreadContext<Impl>的所有方法(多态)
-	  如果传入的参数中checker不为NULL
-	  	则令tc指向CheckerThreadContext<O3ThreadContext<Impl> >的实例
-	  令o3_tc的cpu成员变量等于Impl::O3CPU *的this(原类型为FullO3CPU)
-	  断言o3_tc的成员变量cpu不为NULL，否则输出信息退出
-	  令o3_tc的thread等于当前线程
-	  如果是FullSystem
-	  	 那么当前线程的quiesceEvent赋值为EndQuiesceEvent(tc)
-	  	 EndQuiesceEvent的定义位于cpu/quiesce_event.hh|quiesce_event.cc
-	  	 EndQuiesceEvent作用是timing out静默指令
- *	  给当前线程的成员变量tc赋值，赋值tc(前面刚实例化的)
-   将tc添加到当前cpu的成员变量threadContexts的队列中去
-如果传入参数中switched_out为false且ISA配置中interrupts为false，
-   那么说明没有载入中断控制，输出错误信息并退出
-遍历当前线程
-   设置当前线程的funcExeInst(记录已经执行的指令数)为0
-   setFuncExeInst定义于cpu/thread_state.hh
  *
  *
  */
@@ -323,7 +221,8 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
 	  /*
 	   * 初始化ISA类、icachePort和dcachePort
 	   *
-	   * 根据配置初始化numThreads个ISA为NULL，定义于arch/X86/isa.hh|isa.cc，numThreads为单核线程数
+	   * numThreads为单核可运行线程数
+	   * 根据配置初始化numThreads个ISA为NULL，定义于arch/X86/isa.hh|isa.cc
 	   * 根据配置初始化IcachePort(for fetching instruction)，定义于cpu/o3/cpu.hh
 	   * 根据配置初始化dcachePort(for load/store queue),定义于cpu/o3/cpu.hh
 	   */
@@ -346,13 +245,12 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
       iewQueue(params->backComSize, params->forwardComSize),
 	  /*
 	   * 根据配置初始化activityRec、globalSeqNum、system、drainManager、lastRunningCycle
-	   *
-根据配置初始化activityRec，定义于cpu/activity.hh|activity.cc
-功能主要是通知cpu activities的状态
-初始化globalSeqNum为1，globalSeqNum是instruction全局计数器
-根据配置初始化system(模拟的系统)，传入基本配置参数，定义位于sim/system.hh|system.cc
-初始化drainManager(track所有currently draining的simObject)为NULL
-初始化lastRunningCycle(记录上一个运行的Cycle数)为当前Cycle数
+	   * 根据配置初始化activityRec，定义于cpu/activity.hh|activity.cc
+	   * 根据配置初始化activityRec，定义于cpu/activity.hh|activity.cc功能主要是通知cpu activities的状态
+	   * 初始化globalSeqNum为1，globalSeqNum是instruction全局计数器
+	   * 根据配置初始化system(模拟的系统)，传入基本配置参数，定义位于sim/system.hh|system.cc
+	   * 初始化drainManager(track所有currently draining的simObject)为NULL
+	   * 初始化lastRunningCycle(记录上一个运行的Cycle数)为当前Cycle数
 	   */
       activityRec(name(), NumStages,
                   params->backComSize + params->forwardComSize,
@@ -362,6 +260,17 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
       drainManager(NULL),
       lastRunningCycle(curCycle())
 {
+	/*
+	 * 根据配置初始化_status、checker、thread和tid内线程数
+	 *
+	 * 如果params参数的switched_out为false，那么_status(CPU的状态标识符)为Running
+	 * 否则，_status=SwitchedOut
+	 * 如果params参数中checker不为NULL，那么实例化Checker(作用类比Oracle/Check)
+	 * 传入IcachePort和System参数
+	 * 否则，checker为NULL
+	 * 如果FullSystem为false，即非FullSystem模式运行，则改变thread和tids的大小为numThreads
+	 * FS模式暂时不支持超线程，SE模式支持，所以这里resize cpu中线程的数量
+	 */
     if (!params->switched_out) {
         _status = Running;
     } else {
@@ -387,6 +296,15 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     // to the upper level CPU, and not this FullO3CPU.
 
     // Set up Pointers to the activeThreads list for each stage
+    /*
+     * 根据配置初始化fetch等stage的activeThreads成员变量
+     *
+     * 给fetch stage传入activeThreads list引用
+     * 给decode stage传入activeThreads list引用
+     * 给rename stage传入activeThreads list引用
+     * 给iew stage传入activeThreads list引用
+     * 给commit stage传入activeThreads list引用
+     */
     fetch.setActiveThreads(&activeThreads);
     decode.setActiveThreads(&activeThreads);
     rename.setActiveThreads(&activeThreads);
@@ -394,6 +312,15 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     commit.setActiveThreads(&activeThreads);
 
     // Give each of the stages the time buffer they will use.
+    /*
+     * 初始化fetch等stage的timeBuffer
+     *
+     * 给fetch stage传入timeBuffer引用
+     * 给decode stage传入timeBuffer引用
+     * 给rename stage传入timeBuffer引用
+     * 给iew stage传入timeBuffer引用
+     * 给commit stage传入timeBuffer引用
+     */
     fetch.setTimeBuffer(&timeBuffer);
     decode.setTimeBuffer(&timeBuffer);
     rename.setTimeBuffer(&timeBuffer);
@@ -401,6 +328,20 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     commit.setTimeBuffer(&timeBuffer);
 
     // Also setup each of the stages' queues.
+    /*
+     * 初始化fetch等stage的各种Queue
+     *
+     * 给fetch stage传入fetchQueue引用
+     * 给decode stage传入fetchQueue引用
+     * 给commit stage传入fetchQueue引用
+     * 给decode stage传入decodeQueue引用
+     * 给rename stage传入decodeQueue引用
+     * 给rename stage传入renameQueue引用
+     * 给iew stage传入renameQueue引用
+     * 给iew stage传入iewQueue引用
+     * 给commit stage传入iewQueue引用
+     * 给commit stage传入renameQueue引用
+     */
     fetch.setFetchQueue(&fetchQueue);
     decode.setFetchQueue(&fetchQueue);
     commit.setFetchQueue(&fetchQueue);
@@ -411,11 +352,24 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     iew.setIEWQueue(&iewQueue);
     commit.setIEWQueue(&iewQueue);
     commit.setRenameQueue(&renameQueue);
-
+    /*
+     * 初始化commit和rename的iew和commit成员变量
+     *
+     * 给commit stage传入iew引用
+     * 给rename stage传入iew引用
+     * 给rename stage传入commit引用
+     */
     commit.setIEWStage(&iew);
     rename.setIEWStage(&iew);
     rename.setCommitStage(&commit);
-
+    /*
+     * 根据模拟模式初始化active_threads
+     *
+     * 定义类型为ThreadID的active_threads
+     * 如果是FullSystem,那么active_threads=1
+     * 否则active_threads = params->workload.size()
+     *    且如果active_threads>MaxThreads时，输出错误信息并退出
+     */
     ThreadID active_threads;
     if (FullSystem) {
         active_threads = 1;
@@ -430,10 +384,26 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     }
 
     //Make Sure That this a Valid Architeture
+    /*
+     * 断言模拟器参数配置
+     *
+     * 断言如果传入参数的物理int型寄存器配置小于单核线程数*ISA中NumIntRegs的配置，则退出
+     * 断言如果传入参数的物理Float型寄存器配置小于单核线程数*ISA中NumFloatRegs的配置，则退出
+     * 断言如果传入参数的物理CC(condition code)型寄存器配置小于单核线程数*ISA中NumCCRegs的配置，则退出
+     */
     assert(params->numPhysIntRegs   >= numThreadsTheISA::NumIntRegs);
     assert(params->numPhysFloatRegs >= numThreadsTheISA::NumFloatRegs);
     assert(params->numPhysCCRegs >= numThreadsTheISA::NumCCRegs);
-
+    /*
+     * 初始化rename和iew的scoreboard
+     * 初始化所有线程的isa和commitRenameMap、renameMap
+     *
+     * 传入rename stage scoreboard的引用
+     * 传入iew stage scoreboard的引用
+     * 根据配置初始化线程中的isa
+     * 对单核中所有线程中的commitRenameMap和renameMap执行init方法进行初始化
+     * commitRenameMap和renameMap都是RenameMap类型(架构寄存器到物理寄存器的映射)
+     */
     rename.setScoreboard(&scoreboard);
     iew.setScoreboard(&scoreboard);
 
@@ -457,6 +427,17 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
 
     // Initialize rename map to assign physical registers to the
     // architectural registers for active threads only.
+    /*
+     * 初始化rename、commit的renameMap和commitRenameMap
+     *
+     * 对每个活动线程的renameMap和commitRenameMap绑定Entry
+     * 按int,float,cc三种类型分别进行Entry的绑定
+     *
+     * 给rename stage传入配置好映射的renameMap
+     * 给commit stage传入配置好映射的commitRenameMap
+     * 给rename stage传入freeList(内有空闲的register list)引用
+     *
+     */
     for (ThreadID tid = 0; tid < active_threads; tid++) {
         for (RegIndex ridx = 0; ridx < TheISA::NumIntRegs; ++ridx) {
             // Note that we can't use the rename() method because we don't
@@ -484,6 +465,17 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     rename.setFreeList(&freeList);
 
     // Setup the ROB for whichever stages need it.
+    /*
+     * 初始化lastActivatedCycle和commit的ROB
+     * Debug模式执行的调试代码
+     * 记录运行信息
+     * 分配thread的线程队列大小
+     * 给commit stage传入ROB
+     * 初始化lastActivatedCycle(标记上一个活动状态的Cycle)为0
+     * 调试代码，已被弃用(if 0)
+     * 记录运行信息
+     * 初始化thread(vector容器，存储线程)并分配numThreads大小的空间
+     */
     commit.setROB(&rob);
 
     lastActivatedCycle = 0;
@@ -497,55 +489,21 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
 
     // Setup any thread state.
     this->thread.resize(this->numThreads);
-    /*
-    对每个活动线程设置架构寄存器到物理寄存器的映射
-    int,float,cc三种类型分别进行映射
-     *
-    给rename stage传入配置好映射的renameMap
-    给commit stage传入配置好映射的commitRenameMap
-    给rename stage传入freeList(内有空闲的register list)引用
-     *
-    给commit stage传入ROB
-    初始化lastActivatedCycle(标记上一个活动状态的Cycle)为0
-     *
-    调试代码，已被弃用(if 0)
-    记录运行信息("")
-     *
-    初始化thread(vector容器，存储线程)并给分配numThreads的大小
-    遍历单核中所有线程：
-       如果是FullSystem(FullSystem模式暂时不支持超线程，所以还是一核一线程)
-       	 断言numThreads==1，否则输出信息退出
-          给每个线程实例化一个Thread，第三个参数process为NULL
-       如果是非FullSystem模式(SE模式，支持超线程，所以numThreads>=1)
-       	 如果tid<params->workload.size()(传入的配置参数)
-       	 	记录运行信息
-       	 	对每个线程进行实例化
-       	 否则
-       	 	对每个线程进行实例化时，将第三个参数process设置为NULL
-       tc是指向ThreadContext的指针，ThreadContext提供所有thread state的公共接口
-       声明并实例化O3ThreadContext<Impl> *类型的o3_tc
-       令tc = o3_tc，会让tc的指针指向O3ThreadContext<Impl>
-    	  这样tc可以就访问O3ThreadContext<Impl>的所有方法(多态)
-    	  如果传入的参数中checker不为NULL
-    	  	则令tc指向CheckerThreadContext<O3ThreadContext<Impl> >的实例
-    	  令o3_tc的cpu成员变量等于Impl::O3CPU *的this(原类型为FullO3CPU)
-    	  断言o3_tc的成员变量cpu不为NULL，否则输出信息退出
-    	  令o3_tc的thread等于当前线程
-    	  如果是FullSystem
-    	  	 那么当前线程的quiesceEvent赋值为EndQuiesceEvent(tc)
-    	  	 EndQuiesceEvent的定义位于cpu/quiesce_event.hh|quiesce_event.cc
-    	  	 EndQuiesceEvent作用是timing out静默指令
-     *	  给当前线程的成员变量tc赋值，赋值tc(前面刚实例化的)
-       将tc添加到当前cpu的成员变量threadContexts的队列中去
-    如果传入参数中switched_out为false且ISA配置中interrupts为false，
-       那么说明没有载入中断控制，输出错误信息并退出
-    遍历当前线程
-       设置当前线程的funcExeInst(记录已经执行的指令数)为0
-       setFuncExeInst定义于cpu/thread_state.hh
-     *
-     *
-     */
+
     for (ThreadID tid = 0; tid < this->numThreads; ++tid) {
+    	/*
+    	 * 根据模拟模式实例化所有单核中可运行的thread(FS:1,SE:2)
+    	 *
+    	 * 如果是FullSystem(FullSystem模式暂时不支持超线程，所以还是一核一线程)
+    	 *    断言numThreads==1，否则输出信息退出
+    	 *    给每个线程实例化一个Thread，第三个参数process为NULL
+    	 * 如果是非FullSystem模式(SE模式，支持超线程，所以numThreads>=1)
+    	 * 	  如果tid<params->workload.size()(传入的配置参数)
+    	 * 	  	 记录运行信息
+    	 * 	  	 对每个线程进行实例化
+    	 * 	  否则
+    	 * 	     对每个线程进行实例化时，将第三个参数process设置为NULL
+    	 */
         if (FullSystem) {
             // SMT is not supported in FS mode yet.
             assert(this->numThreads == 1);
@@ -571,7 +529,27 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
                 //usedTids[tid] = false;
             }
         }
-
+        /*
+         * 实例化tc、o3_tc，并给成员变量cpu、thread进行初始化
+         * 对当前对象(FullO3CPU)[的quiesceEvent]、thread的tc、threadContexts赋值
+         *
+         * [遍历所有单核线程:]
+         * tc是指向ThreadContext的指针，ThreadContext提供所有thread state的公共接口
+         * 声明并实例化O3ThreadContext<Impl> *类型的o3_tc
+         * 令tc = o3_tc，会让tc的指针指向O3ThreadContext<Impl>
+         * 这样tc可以就访问O3ThreadContext<Impl>的所有方法(多态)
+         * 如果传入的参数中checker不为NULL
+         *    则令tc指向CheckerThreadContext<O3ThreadContext<Impl> >的实例
+         * 令o3_tc的cpu成员变量等于Impl::O3CPU *的this(原类型为FullO3CPU)
+         * 断言o3_tc的成员变量cpu不为NULL，否则输出信息退出
+         * 令o3_tc的thread等于当前线程
+         * 如果是FullSystem
+         *    那么当前线程的quiesceEvent赋值为EndQuiesceEvent(tc)
+         *    EndQuiesceEvent的定义位于cpu/quiesce_event.hh|quiesce_event.cc
+         *    EndQuiesceEvent作用是timing out静默指令
+         * 给当前线程的成员变量tc赋值，赋值tc(前面刚实例化的)
+         * 将tc添加到当前cpu的成员变量threadContexts的队列中去
+         */
         ThreadContext *tc;
 
         // Setup the TC that will serve as the interface to the threads/CPU.
@@ -602,6 +580,16 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
     }
 
     // FullO3CPU always requires an interrupt controller.
+    /*
+     * 根据配置参数进行运行前的判断以及错误信息输出
+     * 初始化单核中所有线程中当前对象的thread的funcExeInst为0
+     *
+     * 如果传入参数中switched_out为false且ISA配置中interrupts为false，
+     *    那么说明没有载入中断控制，输出错误信息并退出
+     * 遍历单核所有线程
+     *    设置当前线程的funcExeInst(记录已经执行的指令数)为0
+     *    setFuncExeInst定义于cpu/thread_state.hh
+     */
     if (!params->switched_out && !interrupts) {
         fatal("FullO3CPU %s has no interrupt controller.\n"
               "Ensure createInterruptController() is called.\n", name());
