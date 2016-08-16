@@ -75,43 +75,8 @@
 
 using namespace std;
 /*
-DefaultFetch<Impl>::DefaultFetch()
-DefaultFetch的构造函数，初始化成员变量
- *
- *
-
-
-
-
-
-
-初始化retryTid，值为-1
-初始化cacheBlkSize，值是System类的cache line size，位于sim/system.hh|system.cc
-结合FullO3CPU类的构造函数来看，System初始化时会从参数中获取cache_line_size
-根据配置初始化fetchBufferSize(fetch buffer的大小，可能会比cache line小,单位byte)
-初始化fetchBufferMask(将fetch address修正到fetch buffer边界内)
-根据配置初始化fetchQueueSize(存储微操作的fetch queue大小)
-根据配置初始化numThreads(线程的数量)
-根据配置初始化numFetchingThreads(正在进行fetching操作的线程)
-初始化finishTranslationEvent(延迟translation faults生成的事件 )
- *
-如果numThreads>MaxThreads,输出错误信息并退出(定义位于base/misc.hh)
-如果fetchWidth>MaxWidth,输出错误信息并退出
-如果fetchBufferSize>cacheBlkSize,输出错误信息并退出
-如果cacheBlkSize>fetchBufferSize,输出错误信息并退出
- *
-获取参数中的smtFetchPolicy
-字符串的字母全部转化为小写字母
-根据字符串的值初始化fetchPolicy
-(SingleThread/roundrobin/Branch/iqcount/lsqcount)
-获取instruction的大小
-初始化每个线程的decoder、fetchBuffer、fetchBufferPC、fetchBufferValid
-fetchBufferPC的值是fetch buffer中第一个指令的address
-fetchBufferValid用来标记fetch buffer中值是否有效
-根据配置初始化BPredUnit(branch predictor,类定义于cpu/pred/bpred_unit.hh)
- *
-给每个decoder线程分配decoder实例
-给每个线程的fetch buffer分配uint8_t[fetchBufferSize]大小的空间
+ * DefaultFetch<Impl>::DefaultFetch()
+ * DefaultFetch的构造函数，初始化成员变量
  *
  */
 template<class Impl>
@@ -143,30 +108,62 @@ DefaultFetch<Impl>::DefaultFetch(O3CPU *_cpu, DerivO3CPUParams *params)
 	   */
       fetchWidth(params->fetchWidth),
       decodeWidth(params->decodeWidth),
-	  //类型为Packet指针
-	  //Packet是用于存储系统(e.g.L1,L2 cache)之间交换被封装好的数据包
-	  //Packet类位于mem/packet.hh中
 	  /*
 	   * 初始化retryPkt(要被重新发送的数据包)
 	   *
 	   * 初始化retryPkt，值为NULL
-	   *
-	   *
+	   * 类型为Packet指针
+	   * Packet是用于存储系统(e.g.L1,L2 cache)之间交换被封装好的数据包
+	   * Packet类位于mem/packet.hh中
 	   */
       retryPkt(NULL),
-	  //类型为int16_t，定义于fetch.hh和base/types.hh
-	  //等待cache告知fetch需要retry的线程ID
-	  //invalidThreadID为-1
+	  /*
+	   * 初始化retryTid(cache中等待通知fetch retry的线程ID)
+	   *
+	   * 初始化retryTid，InvalidThreadID值为-1
+	   * 类型为int16_t，定义于fetch.hh和base/types.hh
+	   * cache中等待告知fetch retry的线程ID
+	   */
       retryTid(InvalidThreadID),
-	  //cacheLineSize()的定义位于sim/system.hh
+	  /*
+	   * 根据配置初始化cacheBlkSize
+	   *
+	   * 初始化cacheBlkSize，值是System类的cache line size，位于sim/system.hh|system.cc
+	   * 结合FullO3CPU类的构造函数来看，System初始化时会从参数中获取cache_line_size
+	   */
       cacheBlkSize(cpu->cacheLineSize()),
+	  /*
+	   * 根据配置初始化fetchBufferSize、fetchBufferMask、fetchQueueSize、
+	   * numThreads和numFetchingThreads
+	   *
+	   * 根据配置初始化fetchBufferSize(fetch buffer的大小，可能会比cache line小,单位byte)
+	   * 根据配置初始化fetchBufferMask(将fetch address修正到fetch buffer边界内)
+	   * 根据配置初始化fetchQueueSize(存储微操作的fetch queue大小)
+	   * 根据配置初始化numThreads(线程的数量)
+	   * 根据配置初始化numFetchingThreads(正在进行fetching操作的线程)
+	   */
       fetchBufferSize(params->fetchBufferSize),
       fetchBufferMask(fetchBufferSize - 1),
       fetchQueueSize(params->fetchQueueSize),
       numThreads(params->numThreads),
       numFetchingThreads(params->smtNumFetchingThreads),
+	  /*
+	   * 初始化finishTranslationEvent
+	   *
+	   * 用来延迟translation faults生成的事件
+	   * 定义和英文注释参见cpu/o3/fetch.hh的FinishTranslationEvent类
+	   */
       finishTranslationEvent(this)
 {
+	/*
+	 * 检测运行配置参数，输出错误并退出
+	 *
+	 * MaxThreads为4，配置位于cpu/o3/impl.hh
+	 * 如果numThreads>MaxThreads,输出错误信息并退出(定义位于base/misc.hh)
+	 * 如果fetchWidth>MaxWidth,输出错误信息并退出
+	 * 如果fetchBufferSize>cacheBlkSize,输出错误信息并退出
+	 * 如果cacheBlkSize>fetchBufferSize,输出错误信息并退出
+	 */
     if (numThreads > Impl::MaxThreads)
         fatal("numThreads (%d) is larger than compiled limit (%d),\n"
               "\tincrease MaxThreads in src/cpu/o3/impl.hh\n",
@@ -181,7 +178,14 @@ DefaultFetch<Impl>::DefaultFetch(O3CPU *_cpu, DerivO3CPUParams *params)
     if (cacheBlkSize % fetchBufferSize)
         fatal("cache block (%u bytes) is not a multiple of the "
               "fetch buffer (%u bytes)\n", cacheBlkSize, fetchBufferSize);
-
+    /*
+     * 根据配置初始化fetch的fetchPolicy
+     *
+     * 获取配置中的smtFetchPolicy
+     * 将smtFetchPolicy中的大写字母全部转化为小写字母
+     * 根据字符串的值初始化fetchPolicy
+     * (SingleThread/roundrobin/Branch/iqcount/lsqcount)
+     */
     std::string policy = params->smtFetchPolicy;
 
     // Convert string to lowercase
@@ -211,6 +215,15 @@ DefaultFetch<Impl>::DefaultFetch(O3CPU *_cpu, DerivO3CPUParams *params)
     }
 
     // Get the size of an instruction.
+    /*
+     * 根据配置初始化instSize
+     * 初始化所有线程中decoder、fetchBuffer、fetchBufferPC、fetchBufferValid
+     *
+     * instSize是fetch中的instruction的大小
+     * decoder定义于arch/X86/decoder.hh
+     * fetchBufferPC的值是fetch buffer中第一个指令的address
+     * fetchBufferValid用来标记fetch buffer中值是否有效
+     */
     instSize = sizeof(TheISA::MachInst);
 
     for (int i = 0; i < Impl::MaxThreads; i++) {
@@ -219,7 +232,13 @@ DefaultFetch<Impl>::DefaultFetch(O3CPU *_cpu, DerivO3CPUParams *params)
         fetchBufferPC[i] = 0;
         fetchBufferValid[i] = false;
     }
-
+    /*
+     * 根据配置初始化branchPred(branch predictor)
+     * 实例化单核线程中所有的decoder
+     * 为fetchBuffer按照配置分配空间
+     *
+     * BPredUnit类定义于cpu/pred/bpred_unit.hh
+     */
     branchPred = params->branchPred;
 
     for (ThreadID tid = 0; tid < numThreads; tid++) {
