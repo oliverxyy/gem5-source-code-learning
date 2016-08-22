@@ -992,40 +992,63 @@ DefaultFetch<Impl>::squash(const TheISA::PCState &newPC,
     cpu->removeInstsNotInROB(tid);
 }
 
+/*
+ * fetch stage的时间点计时函数
+ */
 template <class Impl>
 void
 DefaultFetch<Impl>::tick()
 {
-	//active thread的begin位置
+	/*
+	 * 获取activeThreads中线程的起始位置
+	 * 声明并初始化status_change为false
+	 * 初始化wroteToTimeBuffer为false
+	 *
+	 * activeThreads：活动线程
+	 * status_change：用于标记fetch thread的状态改变与否
+	 * wroteToTimeBuffer：标记此cycle内的fetch是否被写入time buffer
+	 * 用来告知CPU这个cycle内是否activity
+	 */
     list<ThreadID>::iterator threads = activeThreads->begin();
-    list<ThreadID>::iterator end = activeThreads->end();//active thread的end位置
-    bool status_change = false;//用于标记fetch thread的状态改变与否
-
-    wroteToTimeBuffer = false;//用于标记此cycle内的fetch是否被写入time buffer
-    //将issuePipelinedIfetch的数组值全设为false
-    //issuePipelinedIfetch数组的索引值为fetch thread id
-    //issuePipelinedIfetch为true时，表示该线程的I-cache request应该被issued
+    list<ThreadID>::iterator end = activeThreads->end();
+    bool status_change = false;
+    wroteToTimeBuffer = false;
+    /*
+     * 初始化所有单核线程的issuePipelinedIfetch
+     *
+     * 将issuePipelinedIfetch的值全部初始化为false
+     * 标记流水线中的I-cache request是否应该被issued(true:issued)
+     */
     for (ThreadID i = 0; i < numThreads; ++i) {
         issuePipelinedIfetch[i] = false;
     }
     //updated_status//
+    /*
+     * 通过检测所有活动线程中的各TimeBuffer类型的变量状态来更新status_change
+     *
+     * TimeBuffer：记录了和其他stage的交换信息(signal)
+     * 通过checkSignalsAndUpdate函数来更新status_change的状态
+     * TimeBuffer存储TimeBufStruct的变量，TimeBufStruct类定义于cpu/o3/comm.hh
+     */
     while (threads != end) {
         ThreadID tid = *threads++;
 
         // Check the signals for each thread to determine the proper status
         // for each thread.
-        //根据checkSignalsAndUpdate来更新status_change的状态
         bool updated_status = checkSignalsAndUpdate(tid);
         status_change =  status_change || updated_status;
     }
-    //记录gem5的track
+    //记录fetch的运行信息
     DPRINTF(Fetch, "Running stage.\n");
-    //如果是FullSystem模式
-    	//如果从commit stage那里得到中断信息，则设置interruptPending为true
-    	//如果从commit stage那里得到清除中断信息，则设置interruptPending为false
+    /*
+     * 初始化FS模式下的interruptPending变量
+     *
+     * 从fromCommit这个timeBuffer中获取interruptPending值
+     * interruptPending:用于标记是否需要中断挂起一次
+     */
     if (FullSystem) {
         if (fromCommit->commitInfo[0].interruptPending) {
-            interruptPending = true;
+        	interruptPending = true;
         }
 
         if (fromCommit->commitInfo[0].clearInterrupt) {
@@ -1035,6 +1058,12 @@ DefaultFetch<Impl>::tick()
     //for loop
     //对每个线程都调用fetch(status_change)函数
     //fetch(status_change)
+    /*
+     * 让所有fetch线程都开始调用fetch(bool)方法
+     *
+     * numFetchingThreads:从配置中读取的变量，fetch线程数
+     *
+     */
     for (threadFetched = 0; threadFetched < numFetchingThreads;
          threadFetched++) {
         // Fetch each of the actively fetching threads.

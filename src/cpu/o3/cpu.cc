@@ -736,7 +736,7 @@ FullO3CPU<Impl>::regStats()
 /*
  *
 void:tick()
-FullO3CPU主函数
+FullO3CPU时间点计时函数
  *
  */
 template <class Impl>
@@ -797,11 +797,11 @@ FullO3CPU<Impl>::tick()
     调用iew_impl.hh中DefaultIEW的tick()方法
     调用commit_impl.hh中DefaultCommit的tick()方法
      *
-    调用fetch stage主方法
-    调用decode stage主方法
-    调用rename stage主方法
-    调用iew stage主方法
-    调用commit stage主方法
+	调用fetch stage的时间点计时函数(即开始功能模块的调用)
+	调用decode stage时间点计时函数
+	调用rename stage时间点计时函数
+	调用iew stage时间点计时函数
+	调用commit stage时间点计时函数
      *
      */
     fetch.tick();
