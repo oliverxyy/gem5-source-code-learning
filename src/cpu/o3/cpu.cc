@@ -156,7 +156,8 @@ FullO3CPU<Impl>::TickEvent::description() const
  * FullO3CPU(FullSystem out of order CPU core simulation)
  * FS模式的乱序CPU core
  *
- *
+ * 模板类Impl实际类型为O3CPUImpl，定义于cpu/o3/impl.hh，
+ * 里面配置了maxThreads=4，maxWidth=8，应用于整个o3大模块
  *
  */
 template <class Impl>

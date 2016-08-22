@@ -191,7 +191,7 @@ class UPCState : public SimplePCState<MachInst>
 
     MicroPC nupc() const { return _nupc; }
     void nupc(MicroPC val) { _nupc = val; }
-
+    //_upc默认初始化为0
     MicroPC
     microPC() const
     {

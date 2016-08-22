@@ -162,6 +162,7 @@ class Decoder
     //Whether or not we're out of bytes
     bool outOfBytes;
     //Whether we've completed generating an ExtMachInst
+    //标记是否已经生成可执行的机器指令
     bool instDone;
     //The size of the displacement value
     int displacementSize;

@@ -144,7 +144,7 @@ class Cycles
 typedef uint64_t Addr;
 
 typedef uint16_t MicroPC;
-
+//2^15
 static const MicroPC MicroPCRomBit = 1 << (sizeof(MicroPC) * 8 - 1);
 
 static inline MicroPC

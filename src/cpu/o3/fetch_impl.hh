@@ -139,7 +139,7 @@ DefaultFetch<Impl>::DefaultFetch(O3CPU *_cpu, DerivO3CPUParams *params)
 	   * 根据配置初始化fetchBufferSize(fetch buffer的大小，可能会比cache line小,单位byte)
 	   * 根据配置初始化fetchBufferMask(将fetch address修正到fetch buffer边界内)
 	   * 根据配置初始化fetchQueueSize(存储微操作的fetch queue大小)
-	   * 根据配置初始化numThreads(线程的数量)
+	   * 根据配置初始化numThreads(fetch线程的数量)
 	   * 根据配置初始化numFetchingThreads(正在进行fetching操作的线程)
 	   */
       fetchBufferSize(params->fetchBufferSize),
@@ -937,18 +937,20 @@ typename DefaultFetch<Impl>::FetchStatus
 DefaultFetch<Impl>::updateFetchStatus()
 {
     //Check Running
+	//获取activeThreads的起始和结尾地址
     list<ThreadID>::iterator threads = activeThreads->begin();
     list<ThreadID>::iterator end = activeThreads->end();
 
     while (threads != end) {
         ThreadID tid = *threads++;
-        //循环判断，每个线程判断一次
-        //如果fetchStatus(其实是ThreadStatus)为Running、Squashing、IcacheAccessComplete之一
-        	//如果FetchStatus(真正的stage status)为Inactive
+        //遍历activeThreads中的线程
+        //如果fetchStatus(thread的FetchStatus)为Running、Squashing、IcacheAccessComplete之一
+        	//如果_status(真正的stage status)为Inactive
         		//那么调用activateStage(更新stageActive[stageIdx]为true)
-        	//返回Active
-        //FetchStatus为Active，那么调用deactivateStage(更新stageActive[stageIdx]为false)
-        //返回Inactive
+        	//return Active
+        //如果_status为Active，那么调用cpu的deactivateStage方法
+        //方法定义于cpu/activity.hh,更新stageActive[stageIdx]为false
+        //return Inactive
         if (fetchStatus[tid] == Running ||
             fetchStatus[tid] == Squashing ||
             fetchStatus[tid] == IcacheAccessComplete) {
@@ -1006,7 +1008,8 @@ DefaultFetch<Impl>::tick()
 	 *
 	 * activeThreads：活动线程
 	 * status_change：用于标记fetch thread的状态改变与否
-	 * wroteToTimeBuffer：标记此cycle内的fetch是否被写入time buffer
+	 * wroteToTimeBuffer：标记此cycle内的fetch是否将指令输出到toDecode中
+	 * toDecode为fetch和decode交换数据的timeBuffer
 	 * 用来告知CPU这个cycle内是否activity
 	 */
     list<ThreadID>::iterator threads = activeThreads->begin();
@@ -1055,13 +1058,10 @@ DefaultFetch<Impl>::tick()
             interruptPending = false;
         }
     }
-    //for loop
-    //对每个线程都调用fetch(status_change)函数
-    //fetch(status_change)
     /*
-     * 让所有fetch线程都开始调用fetch(bool)方法
+     * 让所有活跃的fetch线程都开始调用fetch(bool)方法
      *
-     * numFetchingThreads:从配置中读取的变量，fetch线程数
+     * numFetchingThreads:活跃的fetching线程数
      *
      */
     for (threadFetched = 0; threadFetched < numFetchingThreads;
@@ -1071,21 +1071,27 @@ DefaultFetch<Impl>::tick()
     }
 
     // Record number of instructions fetched this cycle for distribution.
-    //记录每cycle fetch的instructions数量
+    //记录每cycle fetched的instructions数量
     fetchNisnDist.sample(numInst);
-    //如果status_change为true(上面的checkSignalsAndUpdate函数)
-    //那么更新FetchStatus的状态，通过updateFetchStatus()获取
+    /*
+     * 判断并更新fetch stage的状态
+     *
+     * 如果status_change为true(通过上面checkSignalsAndUpdate函数更新)
+     * 那么通过updateFetchStatus()更新_status的值
+     */
     if (status_change) {
         // Change the fetch stage status if there was a status change.
         _status = updateFetchStatus();
     }
 
     // Issue the next I-cache request if possible.
-	//for loop
-	//遍历所有线程，根据issuePipelinedIfetch判断是否执行pipelineIcacheAccesses
-	//pipelineIcacheAccesses函数内部判断，如果buffer没有blocked，则会调用fetchCacheLine()
-	//issuePipelinedIfetch,即issue instructions to fetch
-	//pipelineIcacheAccesses作用是issue next i-cache
+    /*
+     * 遍历所有fetch线程，判断需不需要访问I-cache
+     *
+     * issuePipelinedIfetch,用来标记fetch线程需要不需要被分配I-cache request
+     * pipelineIcacheAccesses作用是
+     * pipelineIcacheAccesses函数：如果buffer没有blocked，则会调用fetchCacheLine()
+     */
     for (ThreadID i = 0; i < numThreads; ++i) {
         if (issuePipelinedIfetch[i]) {
             pipelineIcacheAccesses(i);
@@ -1094,13 +1100,16 @@ DefaultFetch<Impl>::tick()
 
     // Send instructions enqueued into the fetch queue to decode.
     // Limit rate by fetchWidth.  Stall if decode is stalled.
-    //to decode的instructions数量
-    //可用的instructions数量
+    /*
+     * 初始化insts_to_decode和available_insts为0
+     * 遍历所有活动线程，统计未decode的指令数量
+     *
+     * 初始化fetchQueue中需要decode的instructions数量为0
+     * 初始化fetchQueue中还未分派去decode的instructions数量为0
+     * 遍历所有active threads，统计fetchQueue的所有未decode的instructions数量
+     */
     unsigned insts_to_decode = 0;
     unsigned available_insts = 0;
-    //for loop
-    //遍历所有active thread
-    //(实际功能与英文注释不一)统计fetchQueue的所有可用instructions数量
     for (auto tid : *activeThreads) {
         if (!stalls[tid].decode) {
             available_insts += fetchQueue[tid].size();
@@ -1108,14 +1117,23 @@ DefaultFetch<Impl>::tick()
     }
 
     // Pick a random thread to start trying to grab instructions from
+    /*
+     * 随机选取一个线程，按照次序遍历整个activeThreads
+     * 如果没有fetch线程发现decode出现stall且线程中的fetchQueue不为空
+     * 那么将fetchQueue一条条pop出来，加入到toDecode这个timeBuffer中去decode
+     *
+     * 随机选取一个线程地址，开始通过while循环遍历所有activeThreads
+     * advance方法是STL迭代器方法，作用是将迭代器iterator移动n位(这里的处理n随机)
+     *    如果没有fetch线程发现decode出现stall且线程中的fetchQueue不为空
+     *       获取此线程中的fetchQueue的第一个指令inst
+     *       记录运行信息(用到了inst，所以先用临时变量存储，后面再pop出来)
+     *       将wroteToTimeBuffer设置为true，
+     *       即表示此cycle的fetch已经将指令输出到toDecode这个timeBuffer中了
+     *       将此线程的第一个指令pop出来
+     *       令insts_to_decode+1，available_insts-1
+     */
     auto tid_itr = activeThreads->begin();
     std::advance(tid_itr, random_mt.random<uint8_t>(0, activeThreads->size() - 1));
-	//while循环，随机选取一个线程，遍历activeThreads
-		//将fetchQueue的指令pop出来，交给toDecode，在decode stage中会进行decode
-		//对应更新insts_to_decode、available_insts的值
-	//将wroteToTimeBuffer设置为true，告诉cpu fetch is active in this cycle
-	//cpu->activityThisCycle()的具体实现是activity.cc的activity方法
-	//将instructions的number重置为0
     while (available_insts != 0 && insts_to_decode < decodeWidth) {
         ThreadID tid = *tid_itr;
         if (!stalls[tid].decode && !fetchQueue[tid].empty()) {
@@ -1138,12 +1156,18 @@ DefaultFetch<Impl>::tick()
     }
 
     // If there was activity this cycle, inform the CPU of it.
+    //如果wroteToTimeBuffer为true
+    //	 记录运行信息(这个cycle有activity)
+    //   通知cpu调用activityThisCycle
+    //activityThisCycle位于cpu/activity.cc
+    //主要做了一件事情：++activityCount并记录运行信息下来/cycle
     if (wroteToTimeBuffer) {
         DPRINTF(Activity, "Activity this cycle.\n");
         cpu->activityThisCycle();
     }
 
     // Reset the number of the instruction we've fetched.
+    //重设numInst(标记本cycle内fetched的指令数)为0
     numInst = 0;
 }
 
@@ -1325,7 +1349,11 @@ DefaultFetch<Impl>::buildInst(ThreadID tid, StaticInstPtr staticInst,
 
     return instruction;
 }
-
+/*
+ * DefaultFetch<Impl>::fetch
+ * 开始fetch指令
+ *
+ */
 template<class Impl>
 void
 DefaultFetch<Impl>::fetch(bool &status_change)
@@ -1333,12 +1361,20 @@ DefaultFetch<Impl>::fetch(bool &status_change)
     //////////////////////////////////////////
     // Start actual fetch
     //////////////////////////////////////////
-	//ThreadID tid = getFetchingThread(fetchPolicy);
-	//调用getFetchingThread()函数获取thread id
-	//getFetchingThread()简略说作用是获取优先级最高的线程tid
-	//详细说明参考具体函数注释
-	//如果tid是InvalidThreadID，总线程数为1是stall
-	//否则直接return，让下一个线程进行调用
+	/*
+	 * 通过getFetchingThread选取优先级最高的线程ID tid
+	 * 断言cpu状态不是switchedOut
+	 * 如果tid==InvalidThreadID
+	 * 	  令threadFetched=活跃的fetching线程数
+	 * 	  如果配置的numThreads==1，stall
+	 * 	  然后直接执行return操作，fetch(bool)方法结束
+	 *
+	 * fetchPolicy从构造函数处已经初始化
+	 * 通过调用getFetchingThread获取优先级最高的线程ID
+	 * 如果是意外情况会返回InvalidThreadID，
+	 * 具体参见getFetchingThread方法的注释
+	 *
+	 */
     ThreadID tid = getFetchingThread(fetchPolicy);
 
     assert(!cpu->switchedOut());
@@ -1353,14 +1389,21 @@ DefaultFetch<Impl>::fetch(bool &status_change)
 
         return;
     }
-
+	/*
+	 * 记录fetch运行信息
+	 * 获取指令的在PC中的地址
+	 * 计算得到fetchAddr
+	 * 定义并初始化inRom
+	 *
+	 *
+	 * 令thisPC=当前线程pc寄存器中的pc地址
+	 * 令pcOffset=当前线程的fetchOffset,默认值为0
+	 * PCMask为64位地址，除后三位为0，其余位上全为1
+	 * 通过计算得到的fetchAddr,前面61位不变，最后三位修改为0
+	 * 通过isRomMicroPC方法获取inRom的值，标记指令是否在Rom里面
+	 */
     DPRINTF(Fetch, "Attempting to fetch from [tid:%i]\n", tid);
-
     // The current PC.
-    //TheISA::PCState//thisPC:tid线程对应的pc值
-    //Addr:pcOffset//tid线程对应的fetch offset
-    //Addr:fetchAddr//通过计算得到的fetch Address
-    //bool:inRom//判断是否是rom里的micro PC
     TheISA::PCState thisPC = pc[tid];
 
     Addr pcOffset = fetchOffset[tid];
@@ -1371,19 +1414,34 @@ DefaultFetch<Impl>::fetch(bool &status_change)
     // If returning from the delay of a cache miss, then update the status
     // to running, otherwise do the cache access.  Possibly move this up
     // to tick() function.
-    //对tid的fetchStatus进行判断
-    	//IcacheAccessComplete：
-    		//fetchStatus切换为Running
-    		//status_change设置为true
-    	//Running：
-    		//Addr fetchBufferBlockPC = fetchBufferAlignPC(fetchAddr)
-    		//fetchBufferAlignPC:将fetch PC排列到fetch buffer的start位置
-    		//如果fetch Buffer is invalid或者fetchAddr已经移到下一个cache block
-    		//并且没有在macroop中没有剩余的ucode时
-    			//执行fetchCacheLine函数，从icache获取
-    			//下面是一些状态数值的计算
-    		//另外如果有终端或commit instructions存在delay(actually means faults)
-    	//else:idle and so on, do nothing
+    /*
+     * ThreadStatus定义于cpu/o3/fetch.hh中
+     * 如果当前线程的状态为IcacheAccessComplete
+     * 	  记录Icache已经可以访问的运行信息
+     * 	  将当前线程状态修正为Running
+     * 	  将status_change设置为true(前面提到过，标记当前线程状态改变与否的变量)
+     * 如果当前线程状态为Running
+     *    计算得到fetchBufferBlockPC
+     *    如果fetchBufferValid不valid或fetchBufferBlockPC!=fetchBufferPC
+     *    且指令不在Rom里且不是宏操作
+     *       那么记录要对instruction进行translate和read的操作的运行信息
+     *       执行fetchCacheLine函数
+     *       如果当前线程的状态为IcacheWaitResponse，那么++icacheStallCycles
+     *       如果当前线程的状态为ItlbWait，那么++fetchTlbCycles
+     *       否则++fetchMiscStallCycles
+     *       之后直接return，结束fetch(bool)方法
+     *    如果检查出中断信号，且当前线程的delayedCommitfalse
+     *    	 ++fetchMiscStallCycles;
+     *    	 记录当前线程的fetch进程stalled的运行信息
+     *    	 直接return，结束fetch(bool)方法
+     * 否则(剩余几种情况，如Idle、Squashing and so on)
+     * 	  如果当前线程的fetchStatus为Idle
+     * 	  	 ++fetchIdleCycles;
+     * 	  	 记录当前线程处于空闲状态的运行信息
+     * 	  然后直接return，结束fetch(bool)方法
+     *
+     *
+     */
     if (fetchStatus[tid] == IcacheAccessComplete) {
         DPRINTF(Fetch, "[tid:%i]: Icache miss is complete.\n", tid);
 
@@ -1435,11 +1493,28 @@ DefaultFetch<Impl>::fetch(bool &status_change)
     //TheISA::MachInst *cacheInsts//指令从fetchBuffer[tid]中获取
     //const unsigned numInsts//通过计算得到fetchBuffer中的指令数
     //unsigned blkOffset//当前block的偏移量，用于后面判断指令执行有没有超出边界
-    //
+    /*
+     * ++fetchCycles
+     * 令nextPC = thisPC
+     * 定义并初始化staticInst为NULL
+     * 定义并初始化curMacroop为当前线程的宏操作
+     * 记录fetch将指令丢入队列中去decode的运行信息
+     * 定义并初始化predictedBranch为false
+     * 定义并初始化quiesce为false
+     * 定义并初始化cacheInsts指向本线程的fetchBuffer
+     * 通过计算得到numInsts和blkOffset
+     *
+     * staticInst：
+     * curMacroop：
+     * predictedBranch：
+     * quiesce：
+     * cacheInsts
+     * numInsts：
+     * blkOffset：
+     *
+     */
     ++fetchCycles;
-
     TheISA::PCState nextPC = thisPC;
-
     StaticInstPtr staticInst = NULL;
     StaticInstPtr curMacroop = macroop[tid];
 
@@ -1449,52 +1524,67 @@ DefaultFetch<Impl>::fetch(bool &status_change)
 
     DPRINTF(Fetch, "[tid:%i]: Adding instructions to queue to "
             "decode.\n", tid);
-
     // Need to keep track of whether or not a predicted branch
     // ended this fetch block.
     bool predictedBranch = false;
-
     // Need to halt fetch if quiesce instruction detected
     bool quiesce = false;
-
     TheISA::MachInst *cacheInsts =
         reinterpret_cast<TheISA::MachInst *>(fetchBuffer[tid]);
-
     const unsigned numInsts = fetchBufferSize / instSize;
     unsigned blkOffset = (fetchAddr - fetchBufferPC[tid]) / instSize;
 
     // Loop through instruction memory from the cache.
     // Keep issuing while fetchWidth is available and branch is not
     // predicted taken
-    //while循环，当指令数小于fetchWidth+fetchQueue的size小于fetchQueueSize+
-    //不是predicted branch+没有静默指令，执行
-    	//bool：needMem//当StaticInst不在rom/不是当前macroop/ready for decoder时true
-    	//重新获取fetchAddr
-    	//Addr fetchBufferBlockPC//通过调用fetchBufferAlignPC()获得
-    	//如果needMem，即需要内存
-    		//如果fetch buffer is invalid/fetchAddr移到下一个cache block，return
-    		//如果判断访问超出current block边界，则return
-    		//如果ISA存在delay并且pcOffset=0
-    			//当buffer里的fetchAddr和pcAddr对不上时，
-    			//fetchAddr += instSize进行叠加
-    		//MachInst inst//
-    		//decoder[tid]->moreBytes//
-    		//如果发现decoder needMoreBytes
-    			//blkOffset++;
-                //fetchAddr += instSize;
-                //pcOffset += instSize;
-    	//
-
+    /*
+     * 当指令数小于fetchWidth且fetchQueue的size小于fetchQueueSize且
+     * 不是predicted branch且没有静默标志，执行while循环
+     */
     while (numInst < fetchWidth && fetchQueue[tid].size() < fetchQueueSize
            && !predictedBranch && !quiesce) {
         // We need to process more memory if we aren't going to get a
         // StaticInst from the rom, the current macroop, or what's already
         // in the decoder.
+    	/*
+    	 * 定义并初始化needMem
+    	 * 计算对齐后的fetchAddr
+    	 * 定义并初始化fetchBufferBlockPC
+    	 *
+    	 * 当inRom为false且curMacroop为NULL
+    	 * 且decoder[tid]->instReady()时needMem为true
+    	 * (当已生成可执行的机器指令时，instReady返回true)
+    	 */
         bool needMem = !inRom && !curMacroop &&
             !decoder[tid]->instReady();
         fetchAddr = (thisPC.instAddr() + pcOffset) & BaseCPU::PCMask;
         Addr fetchBufferBlockPC = fetchBufferAlignPC(fetchAddr);
-
+        /*
+         * 如果needMem为true
+         * 	  如果fetchBufferValid[tid]为false
+         * 	  或fetchBufferBlockPC != fetchBufferPC[tid]
+         * 	  	 执行break操作，跳出while循环
+         * 	  如果blkOffset>=numInsts
+         * 	     执行break操作，跳出while循环
+         * 	  X86中没有ISA_HAS_DELAY_SLOT，略过此if、
+         *
+         * 	  获取cacheInsts中的指令inst的内容
+         * 	  执行decoder[tid]->moreBytes对inst进行predecode
+         *    如果decoder[tid]中的outOfBytes为true
+         *       将各种变量的标志位对应移至到下一指令
+         *
+         * 当fetchBufferPC[tid]位于fetchBuffer的边界之外
+         * 即fetchBufferPC地址越界时，计算得到的指令范围变大，
+         * 从而会使blkOffset >= numInsts
+         * 此时，指令地址不正确，跳出while循环
+         *
+         * inst是cacheInsts中指定指令的内容
+         * moreBytes方法中会对inst进行predecode
+         *
+         * blkOffset++:cacheInsts中下一条指令
+         * fetchAddr：将fetchAddr地址移至下一条指令的位置
+         * pcOffset：记录pc中的offset偏移量
+         */
         if (needMem) {
             // If buffer is no longer valid or fetchAddr has moved to point
             // to the next cache block then start fetch from icache.
@@ -1550,6 +1640,15 @@ DefaultFetch<Impl>::fetch(bool &status_change)
         		//最新的dev版似乎解决了一些问题，但是还是中途发生错误无法输出
         		//令nextPC = thisPC;
         do {
+        	/*
+        	 * 如果curMacroop为NULL且inRom为false时
+        	 *    如果decoder[tid]已经生成可执行机器指令
+        	 *       staticInst
+        	 *
+        	 *
+        	 *
+        	 *
+        	 */
             if (!(curMacroop || inRom)) {
                 if (decoder[tid]->instReady()) {
                     staticInst = decoder[tid]->decode(thisPC);

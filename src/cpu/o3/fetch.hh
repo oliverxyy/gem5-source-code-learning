@@ -302,6 +302,8 @@ class DefaultFetch
 
 
     /** Check if an interrupt is pending and that we need to handle
+     * 如果interruptPending为true且(指令集不是ALPHA或pc最后两位为00)时
+     * return true，即有中断延迟需要处理
      */
     bool
     checkInterrupt(Addr pc)
@@ -355,7 +357,8 @@ class DefaultFetch
     /** Align a PC to the start of a fetch buffer block. */
     /*
      * fetchBufferAlignPC
-     * 将所有位重置为0
+     * 将addr地址对齐到fetch buffer的范围之中
+     * (注释待定，fetchBufferSize暂时未知)
      */
     Addr fetchBufferAlignPC(Addr addr)
     {
@@ -510,6 +513,7 @@ class DefaultFetch
     std::list<ThreadID> *activeThreads;
 
     /** Number of threads. */
+    //根据配置初始化fetch的线程数
     ThreadID numThreads;
 
     /** Number of threads that are actively fetching. */
