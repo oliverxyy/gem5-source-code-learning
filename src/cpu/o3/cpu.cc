@@ -816,9 +816,13 @@ FullO3CPU<Impl>::tick()
     commit.tick();
 
     // Now advance the time buffers
-    //timeBuffer的定义位于cpu/o3/cpu.hh
-    //TimeBuffer类的定义位于cpu/timebuf.hh
-    //advance方法
+    /*
+     * 为timeBuffer、fetchQueue、decodeQueue、
+     * renameQueue、iewQueue、activityRec分配空间
+     *
+     * timeBuffer的定义位于cpu/o3/cpu.hh
+     * timeBuffer的定义位于cpu/o3/cpu.hhTimeBuffer类的定义位于cpu/timebuf.hh
+     */
     timeBuffer.advance();
 
     fetchQueue.advance();
@@ -827,11 +831,26 @@ FullO3CPU<Impl>::tick()
     iewQueue.advance();
 
     activityRec.advance();
-
+    /*
+     * 如果removeInstsThisCycle为true
+     * 那么清除instList
+     */
     if (removeInstsThisCycle) {
         cleanUpRemovedInsts();
     }
-
+    /*
+     * 如果tickEvent没有调度
+     *    当_status为SwitchedOut时
+     *       记录cpu SwitchedOut的运行信息
+     *    	 令lastRunningCycle = curCycle()
+     *    当activityRec是inactive时或_status为Idle
+     *    	 记录cpu Idle的运行信息
+     *    	 令lastRunningCycle = curCycle()，
+     *    	 同时timesIdled++
+     *    其他情况：
+     *       开始执行schedule方法对tickEvent进行调度
+     *       记录cpu Scheduling new tick的运行信息
+     */
     if (!tickEvent.scheduled()) {
         if (_status == SwitchedOut) {
             DPRINTF(O3CPU, "Switched out!\n");
@@ -846,7 +865,13 @@ FullO3CPU<Impl>::tick()
             DPRINTF(O3CPU, "Scheduling next tick!\n");
         }
     }
-
+    /*
+     * 如果不是FS模式，马上调用updateThreadPriority
+     * 执行tryDrain()，对tickEvent重新进行调度
+     *
+     * updateThreadPriority作用是将activeThreads队列中
+     * 的第一个线程取出，丢入最后一个
+     */
     if (!FullSystem)
         updateThreadPriority();
 

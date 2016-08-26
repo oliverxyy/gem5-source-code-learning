@@ -185,8 +185,8 @@ class TimeBuffer
     /*
      * void:advance
      * 如果base+1>=size，那么令base=0
-     * 根据构造函数
-     *
+     * 根据构造函数初始化base、future、ptr
+     * 为timeBuffer分配空间
      */
     void
     advance()
