@@ -1440,7 +1440,6 @@ DefaultFetch<Impl>::fetch(bool &status_change)
      * 	  	 记录当前线程处于空闲状态的运行信息
      * 	  然后直接return，结束fetch(bool)方法
      *
-     *
      */
     if (fetchStatus[tid] == IcacheAccessComplete) {
         DPRINTF(Fetch, "[tid:%i]: Icache miss is complete.\n", tid);
@@ -1485,14 +1484,6 @@ DefaultFetch<Impl>::fetch(bool &status_change)
         // Status is Idle, so fetch should do nothing.
         return;
     }
-    //TheISA::PCState：nextPC//值为上一个thisPC，即tid线程对应的pc值
-    //StaticInstPtr：staticInst//null
-    //StaticInstPtr：curMacroop//tid线程对应的macroop值
-    //bool：predictedBranch//初始化false
-    //bool：quiesce//被用来stop fetch，初始化为false
-    //TheISA::MachInst *cacheInsts//指令从fetchBuffer[tid]中获取
-    //const unsigned numInsts//通过计算得到fetchBuffer中的指令数
-    //unsigned blkOffset//当前block的偏移量，用于后面判断指令执行有没有超出边界
     /*
      * ++fetchCycles
      * 令nextPC = thisPC
@@ -1504,14 +1495,16 @@ DefaultFetch<Impl>::fetch(bool &status_change)
      * 定义并初始化cacheInsts指向本线程的fetchBuffer
      * 通过计算得到numInsts和blkOffset
      *
-     * staticInst：
-     * curMacroop：
-     * predictedBranch：
-     * quiesce：
-     * cacheInsts
-     * numInsts：
-     * blkOffset：
-     *
+     * staticInst：记录了宏指令的信息
+     * curMacroop：x86宏指令
+     * predictedBranch：标记指令是否是predicted Branch
+     * quiesce：静默指令标记，用于暂停fetch操作
+     * cacheInsts:从fetchBuffer中读出的数据(uint64_t)
+     * numInsts：fetchBuffer中的指令数
+     * blkOffset：几个block的偏移量，一个block理论上对应一条指令内容
+     * Haswell中每次传输16Bytes数据到fetchBuffer
+     * fetchBuffer每次最多输出6条instructions
+     * gem5这里设计理念相同，具体数值待探究
      */
     ++fetchCycles;
     TheISA::PCState nextPC = thisPC;
@@ -1552,7 +1545,8 @@ DefaultFetch<Impl>::fetch(bool &status_change)
     	 * 定义并初始化fetchBufferBlockPC
     	 *
     	 * 当inRom为false且curMacroop为NULL
-    	 * 且decoder[tid]->instReady()时needMem为true
+    	 * 且decoder[tid]没有生成可执行机器指令时needMem为true
+    	 * fetchBufferBlockPC
     	 * (当已生成可执行的机器指令时，instReady返回true)
     	 */
         bool needMem = !inRom && !curMacroop &&
@@ -1570,15 +1564,17 @@ DefaultFetch<Impl>::fetch(bool &status_change)
          *
          * 	  获取cacheInsts中的指令inst的内容
          * 	  执行decoder[tid]->moreBytes对inst进行predecode
-         *    如果decoder[tid]中的outOfBytes为true
-         *       将各种变量的标志位对应移至到下一指令
+         *    如果decoder[tid]中的predecode完成
+         *       将各种变量的标志位对应移至到下一指令(blkOffset等)
          *
          * 当fetchBufferPC[tid]位于fetchBuffer的边界之外
          * 即fetchBufferPC地址越界时，计算得到的指令范围变大，
          * 从而会使blkOffset >= numInsts
          * 此时，指令地址不正确，跳出while循环
          *
-         * inst是cacheInsts中指定指令的内容
+         * inst是cacheInsts中的内容，8Bytes
+         * fetchBufferPC初始化为0
+         * 根据推理只有当fetchAddr同样初始为0，即pc地址从0开始计数才能满足逻辑
          * moreBytes方法中会对inst进行predecode
          *
          * blkOffset++:cacheInsts中下一条指令
@@ -1597,7 +1593,7 @@ DefaultFetch<Impl>::fetch(bool &status_change)
                 // current block.
                 break;
             }
-
+            //X86略过(X86推理下去逻辑会有问题！)
             if (ISA_HAS_DELAY_SLOT && pcOffset == 0) {
                 // Walk past any annulled delay slot instructions.
                 Addr pcAddr = thisPC.instAddr() & BaseCPU::PCMask;
@@ -1621,33 +1617,20 @@ DefaultFetch<Impl>::fetch(bool &status_change)
 
         // Extract as many instructions and/or microops as we can from
         // the memory we've processed so far.
-        //do{}
-			//如果不是current macroop且不是inRom
-				//如果decoder的instructions is ready
-					//staticInst//将thisPC在decoder那里解码
-					//如果staticInst是宏操作(macroop)，那么curMacroop = staticInst;
-					//否则，pcOffset = 0;
-				//否则，直接break；
-        		//bool newMacro//初始化为false
-        		//如果是宏操作/inRom
-        			//如果是inRom：通过调用cpu->microcodeRom.fetchMicroop获取staticInst
-        			//如果是宏操作：通过curMacroop->fetchMicroop获取staticInst
-        			//如果staticInst是最后一个微操作，则newMacro为true
-        		//DynInstPtr instruction = buildInst()
-        		//ppFetch，fetch指针对instruction进行notify
-        		//numInst++
-        		//调试部分，用于输出O3pipeView(然而X86版并未完全兼容，暂时未能调试出)
-        		//最新的dev版似乎解决了一些问题，但是还是中途发生错误无法输出
-        		//令nextPC = thisPC;
         do {
         	/*
         	 * 如果curMacroop为NULL且inRom为false时
         	 *    如果decoder[tid]已经生成可执行机器指令
-        	 *       staticInst
+        	 *    	 获取staticInst和curMacroop，更新fetchedInsts、pcOffset
+        	 *       staticInst为decoder进行decode操作后返回的StaticInstPtr
+        	 *       ++fetchedInsts(记录fetched指令总数)
+        	 *       如果staticInst是宏指令操作
+        	 *          那么令curMacroop=staticInst
+        	 *       否则令pcOffset = 0
+        	 *    否则，直接return，跳出while循环
         	 *
-        	 *
-        	 *
-        	 *
+        	 * staticInst为译码得到的指令分类信息
+        	 * 参照cpu/static_inst.hh分析
         	 */
             if (!(curMacroop || inRom)) {
                 if (decoder[tid]->instReady()) {
@@ -1670,6 +1653,17 @@ DefaultFetch<Impl>::fetch(bool &status_change)
             // Whether we're moving to a new macroop because we're at the
             // end of the current one, or the branch predictor incorrectly
             // thinks we are...
+            /*
+             * 定义并初始化newMacro为false
+             * 如果获取到了curMacroop或inRom为true
+             *    如果inRom为true
+             *    	 那么通过microcodeRom的fetchMicroop获取staticInst
+             *    否则
+             *       staticInst直接通过curMacroop的fetchMicroop取出
+             *    如果通过staticInst判断是last microop，那么newMacro为true
+             *
+             *
+             */
             bool newMacro = false;
             if (curMacroop || inRom) {
                 if (inRom) {
@@ -1680,7 +1674,17 @@ DefaultFetch<Impl>::fetch(bool &status_change)
                 }
                 newMacro |= staticInst->isLastMicroop();
             }
-
+            /*
+             * 定义并初始化instruction
+             * ppFetch用于监听探测instruction的状态
+             * numInst++
+             * 下面是O3PipeView的调试代码
+             * 令nextPC = thisPC
+             *
+             * DynInst定义于cpu/o3/dyn_inst_impl.hh中
+             * 比较复杂
+             * ProbePointArg定义于sim/probe/probe.hh中
+             */
             DynInstPtr instruction =
                 buildInst(tid, staticInst, curMacroop,
                           thisPC, nextPC, true);
@@ -1698,40 +1702,56 @@ DefaultFetch<Impl>::fetch(bool &status_change)
 
             // If we're branching after this instruction, quit fetching
             // from the same block.
-            //predictBranch根据thisPC的branching()和lookupAndUpdateNextPC()确定
-            //其bool值，true，则是predict branch；false，则不是。
-            //newMacro,结果取决于newMacro前面的值，另一个条件似乎没有其作用(!)
-            //thisPC = nextPC;
-            //inRom = isRomMicroPC(thisPC.microPC());这个两行还没有弄懂
-            //如果newMacrotrue，重新计算fetchAddr、blkOffset
-            	//并将pcOffset和currMacroop重置为0和NULL
-            //如果instruction->isQuiesce()true，
-            	//更新fetchStatus[tid]为QuiescePending
-            	//更新status_change为true
-            	//更新quiesce为true
-        //do{}while()的while条件：
-            //(curMacroop不为NULL或decoder[tid]的instruction是true)+
-            //(numInst小于fetchWidth)+(fetchQueue[tid].size()小于fetchQueueSize)
+            /*
+             * 判断当前指令是否是预测分支(predictedBranch true or not)
+             * 同时更新nextPC的值
+             * 如果是预测分支，则记录下运行信息
+             *
+             * predictBranch根据thisPC的branching()和lookupAndUpdateNextPC()确定
+             * 其bool值，true，则是predict branch；false，则不是。
+             * lookupAndUpdateNextPC函数中调用太多了，待研究
+             */
             predictedBranch |= thisPC.branching();
             predictedBranch |=
                 lookupAndUpdateNextPC(instruction, nextPC);
             if (predictedBranch) {
                 DPRINTF(Fetch, "Branch detected with PC = %s\n", thisPC);
             }
-
+            /*
+             * 如果还存在nextPC，那么newMacro为true
+             * 即还有新的宏指令
+             * 令thisPC = nextPC(nextPC已经是下一条指令了)
+             * 更新inRom的值(判断指令在不在Rom)
+             */
             newMacro |= thisPC.instAddr() != nextPC.instAddr();
 
             // Move to the next instruction, unless we have a branch.
             thisPC = nextPC;
             inRom = isRomMicroPC(thisPC.microPC());
-
+            /*
+             * 如果newMacro为true
+             * 更新fetchAddr、blkOffset、pcOffset、curMacroop
+             * 为下一循环译码做准备
+             *
+             * 如果newMacro为true，重新计算fetchAddr、blkOffset
+             * 并将pcOffset和currMacroop重置为0和NULL
+             */
             if (newMacro) {
                 fetchAddr = thisPC.instAddr() & BaseCPU::PCMask;
                 blkOffset = (fetchAddr - fetchBufferPC[tid]) / instSize;
                 pcOffset = 0;
                 curMacroop = NULL;
             }
-
+            /*
+             * 如果instruction被判断是静默指令
+             * 暂停fetch操作，更新fetchStatus、status_change、quiesce
+             * 然后直接break出此do while循环
+             *
+             * 如果instruction->isQuiesce()true
+             * 更新fetchStatus[tid]为QuiescePending
+             * 更新status_change为true
+             * 更新quiesce为true
+             */
             if (instruction->isQuiesce()) {
                 DPRINTF(Fetch,
                         "Quiesce instruction encountered, halting fetch!\n");
@@ -1740,11 +1760,13 @@ DefaultFetch<Impl>::fetch(bool &status_change)
                 quiesce = true;
                 break;
             }
+            //do while 循环条件
         } while ((curMacroop || decoder[tid]->instReady()) &&
                  numInst < fetchWidth &&
                  fetchQueue[tid].size() < fetchQueueSize);
     }
-
+    //判断predictedBranch、numInst、blkOffset情况
+    //记录运行信息
     if (predictedBranch) {
         DPRINTF(Fetch, "[tid:%i]: Done fetching, predicted branch "
                 "instruction encountered.\n", tid);
@@ -1755,18 +1777,13 @@ DefaultFetch<Impl>::fetch(bool &status_change)
         DPRINTF(Fetch, "[tid:%i]: Done fetching, reached the end of the"
                 "fetch buffer.\n", tid);
     }
-    //macroop[tid] = curMacroop;
-    //fetchOffset[tid] = pcOffset;
-    //如果此时numInst>0的话，令wroteToTimeBuffer为true
-    //即告诉cpu这个cycle fetch是active的
-    //pc[tid] = thisPC;
-    //fetchAddr = (thisPC.instAddr() + pcOffset) & BaseCPU::PCMask;
-    //Addr fetchBufferBlockPC = fetchBufferAlignPC(fetchAddr);
-    //计算得到fetchAddr和fetchBufferBlockPC
-    //计算issuePipelinedIfetch[tid]的值
-    //如果fetchStatus[tid]！=IcacheWaitResponse/ItlbWait/IcacheWaitRetry/QuiescePending
-    //且fetchBufferBlockPC != fetchBufferPC[tid]，且curMacroop为NULL
-    //那么issuePipelinedIfetch[tid]为true，否则false
+    /*
+     * 令macroop[tid]=curMacroop
+     * 更新macroop[tid]、fetchOffset[tid]、
+     * wroteToTimeBuffer、fetchAddr、fetchBufferBlockPC
+     * 以及issuePipelinedIfetch[tid]，为下一cycle fetch做准备
+     *
+     */
     macroop[tid] = curMacroop;
     fetchOffset[tid] = pcOffset;
 
