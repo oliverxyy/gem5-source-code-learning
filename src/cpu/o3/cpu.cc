@@ -745,41 +745,41 @@ void
 FullO3CPU<Impl>::tick()
 {
 	/*
-	记录trace信息
-	DPRINTF()函数位于base/trace.hh，作用是记录运行信息
+	 * 记录trace信息
+	 * DPRINTF()函数位于base/trace.hh，作用是记录运行信息
 	 *
-	assert是宏，定义位于/usr/include/assert.h
-	用于debug模式，断言失败时输出错误信息并且终止程序运行
-	使用两条断言，断言只在debug模式下起作用
-	第一条断言条件是!switchedOut()，函数位于cpu/base.hh
-	当CPU是switch out状态时为true，!switchedOut()==false
-	当CPU是active状态时为false，!switchedOut()==true
-	第二条断言条件是getDrainState() != Drainable::Drained
-	getDrainState()函数位于sim/drain.hh
-	Drainable类的成员变量State为enum类型：Running/Draining/Drained
-	当_drainState为Drained时，条件为false，输出错误信息并终止程序运行
-	当_drainState为Running/Draining时，条件为true
+	 * assert是宏，定义位于/usr/include/assert.h
+	 * 用于debug模式，断言失败时输出错误信息并且终止程序运行
+	 * 使用两条断言，断言只在debug模式下起作用
+	 * 第一条断言条件是!switchedOut()，函数位于cpu/base.hh
+	 * 当CPU是switch out状态时为true，!switchedOut()==false
+	 * 当CPU是active状态时为false，!switchedOut()==true
+	 * 第二条断言条件是getDrainState() != Drainable::Drained
+	 * getDrainState()函数位于sim/drain.hh
+	 * Drainable类的成员变量State为enum类型：Running/Draining/Drained
+	 * 当_drainState为Drained时，条件为false，输出错误信息并终止程序运行
+	 * 当_drainState为Running/Draining时，条件为true
 	 *
 	 */
     DPRINTF(O3CPU, "\n\nFullO3CPU: Ticking main, FullO3CPU.\n");
     assert(!switchedOut());
     assert(getDrainState() != Drainable::Drained);
     /*
-    Stats::Scalar numCycles
-    numCycles是标记CPU simulated cycle的number
-    每调用一次FullO3CPU<Impl>::tick()的方法就++numCycles
+     * Stats::Scalar numCycles
+     * numCycles是标记CPU simulated cycle的number
+     * 每调用一次FullO3CPU<Impl>::tick()的方法就++numCycles
      *
-    ppCycles的定义位于cpu/base.hh，为PMUUPtr类型
-    PMUUPtr实际上是unique_ptr<PMU>，定义在sim/probe/pmu.hh
-    PMU的类型是ProbePointArg<uint64_t>，也定义在sim/probe/pmu.hh
-    ProbePointArg定义在sim/probe/probe.hh
-    ppCycles->notify(1)实际上调用ProbePointArg的notify方法
-    方法作用是遍历vector<ProbeListenerArgBase<Arg> *> listeners，
-    并调用listener的ProbeListenerArgBase的notify()方法
-    然而ProbeListenerArgBase的notify方法是虚函数
-    因而看其子类ProbeListenerArgBase的实现
-    子类的notify方法里面比较复杂，需要找到实例进行分析
-    最后总结推测，ppCycles->notify(1)的作用是唤醒PMU的listener
+     * ppCycles的定义位于cpu/base.hh，为PMUUPtr类型
+     * PMUUPtr实际上是unique_ptr<PMU>，定义在sim/probe/pmu.hh
+     * PMU的类型是ProbePointArg<uint64_t>，也定义在sim/probe/pmu.hh
+     * ProbePointArg定义在sim/probe/probe.hh
+     * ppCycles->notify(1)实际上调用ProbePointArg的notify方法
+     * 方法作用是遍历vector<ProbeListenerArgBase<Arg> *> listeners，
+     * 并调用listener的ProbeListenerArgBase的notify()方法
+     * 然而ProbeListenerArgBase的notify方法是虚函数
+     * 因而看其子类ProbeListenerArgBase的实现
+     * 子类的notify方法里面比较复杂，需要找到实例进行分析
+     * 最后总结推测，ppCycles->notify(1)的作用是唤醒PMU的listener
      *
      */
     ++numCycles;
@@ -789,20 +789,20 @@ FullO3CPU<Impl>::tick()
 
     //Tick each of the stages
     /*
-    fetch等变量的定义位于cpu/o3/cpu.hh
-    Fetch等变量的定义位于cpu/o3/cpu_policy.hh
+     * fetch等变量的定义位于cpu/o3/cpu.hh
+     * Fetch等变量的定义位于cpu/o3/cpu_policy.hh
      *
-    调用fetch_impl.hh中DefaultFetch的tick()方法
-    调用decode_impl.hh中DefaultDecode的tick()方法
-    调用rename_impl.hh中DefaultRename的tick()方法
-    调用iew_impl.hh中DefaultIEW的tick()方法
-    调用commit_impl.hh中DefaultCommit的tick()方法
+     * 调用fetch_impl.hh中DefaultFetch的tick()方法
+     * 调用decode_impl.hh中DefaultDecode的tick()方法
+     * 调用rename_impl.hh中DefaultRename的tick()方法
+     * 调用iew_impl.hh中DefaultIEW的tick()方法
+     * 调用commit_impl.hh中DefaultCommit的tick()方法
      *
-	调用fetch stage的时间点计时函数(即开始功能模块的调用)
-	调用decode stage时间点计时函数
-	调用rename stage时间点计时函数
-	调用iew stage时间点计时函数
-	调用commit stage时间点计时函数
+	 * 调用fetch stage的时间点计时函数(即开始功能模块的调用)
+	 * 调用decode stage时间点计时函数
+	 * 调用rename stage时间点计时函数
+	 * 调用iew stage时间点计时函数
+	 * 调用commit stage时间点计时函数
      *
      */
     fetch.tick();
