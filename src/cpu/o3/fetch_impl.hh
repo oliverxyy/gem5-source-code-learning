@@ -675,13 +675,11 @@ DefaultFetch<Impl>::lookupAndUpdateNextPC(
 /*
  * fetchCacheLine()
  * 初始化fault为NoFault
- * 断言cpu状态为active
  * 如果cacheBlocked为true，即cache阻塞
- * 	  记录运行信息后就直接return false；
+ * 	  直接return false；
  * 如果是中断并且没有延迟提交(!delayedCommit[tid]==true)
- *    记录运行信息后就直接return false；
- * 对fetchBufferBlockPC执行对齐操作，对齐到fetchBuffer的start地址
- * 记录fetch cache line的运行信息
+ *    直接return false；
+ * fetchBufferBlockPC为参数vaddr进行align(重置为0)后的地址
  * RequestPtr mem_re//传参，初始化mem_re变量
  * 用cpu->taskId()初始化mem_re的_taskId的值
  * 令memReq[tid] = mem_re;
@@ -692,10 +690,6 @@ DefaultFetch<Impl>::lookupAndUpdateNextPC(
  * 参数为(mem_req, cpu->thread[tid]->getTC(),trans, BaseTLB::Execute);
  * getTC()函数全局查找有三个，作用大致都是返回指向ThreadContext的指针
  * return true;
- *
- *
- * switchedOut()定义域BaseCPU，位于cpu/base.hh
- * 标记cpu的两种状态：switchedOut和active
  */
 template <class Impl>
 bool

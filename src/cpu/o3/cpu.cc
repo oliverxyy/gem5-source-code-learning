@@ -479,7 +479,6 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
      * 初始化thread(vector容器，存储线程)并分配numThreads大小的空间
      */
     commit.setROB(&rob);
-
     lastActivatedCycle = 0;
 #if 0
     // Give renameMap & rename stage access to the freeList;
