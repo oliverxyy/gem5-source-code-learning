@@ -183,13 +183,16 @@ TLB::demapPage(Addr va, uint64_t asn)
 /*
  * Fault:translateInt()
  *
- *
- *
- *
  */
 Fault
-TLB:: (RequestPtr req, ThreadContext *tc)
+TLB:: translateInt(RequestPtr req, ThreadContext *tc)
 {
+	/*
+	 * IntAddrPrefixMask：前32位1，后32位0
+	 * IntAddrPrefixCPUID：前31位0，中间1，后32位0
+	 * IntAddrPrefixMSR：前30位0，中间1，后33位0
+	 * IntAddrPrefixIO：前29位0，中间两位1，后33位0
+	 */
     DPRINTF(TLB, "Addresses references internal memory.\n");
     Addr vaddr = req->getVaddr();
     Addr prefix = (vaddr >> 3) & IntAddrPrefixMask;
@@ -247,7 +250,7 @@ TLB::finalizePhysical(RequestPtr req, ThreadContext *tc, Mode mode) const
     Addr paddr = req->getPaddr();
 
     AddrRange m5opRange(0xFFFF0000, 0xFFFFFFFF);
-
+    //这。。。啥意思
     if (m5opRange.contains(paddr)) {
         if (m5opRange.contains(paddr)) {
             req->setFlags(Request::MMAPPED_IPR | Request::GENERIC_IPR);
@@ -285,6 +288,14 @@ TLB::finalizePhysical(RequestPtr req, ThreadContext *tc, Mode mode) const
 }
 /*
  * Fault:translate()
+ * 如果判断有保护模式：
+ *    如果paging enabled：
+ *       通过vaddr获取paddr
+ *    没有：
+ *       paddr = vaddr
+ * 没有：
+ *    paddr = vaddr
+ *
  * 通过调用req->getFlags()声明初始化uint32_t类型的flags
  * int seg = flags & SegmentFlagMask;
  * bool storeCheck = flags & (StoreCheck << FlagShift);
@@ -362,7 +373,7 @@ TLB::translate(RequestPtr req, ThreadContext *tc, Translation *translation,
 
     Addr vaddr = req->getVaddr();
     DPRINTF(TLB, "Translating vaddr %#x.\n", vaddr);
-
+    //值位于arch/X86/isa.hh中的regVal数组中
     HandyM5Reg m5Reg = tc->readMiscRegNoEffect(MISCREG_M5_REG);
 
     // If protected mode has been enabled...
@@ -501,10 +512,13 @@ TLB::translateAtomic(RequestPtr req, ThreadContext *tc, Mode mode)
 }
 /*
  * translateTiming()
- * 声明delayedResponse
- * Fault fault=TLB::translate(req,tc,translation,mode,delayedResponse,true);
- * 如果delayedResponse为false，
- * 那么调用translation->finish(fault, req, tc, mode)
+ * 声明并定义delayedResponse
+ * 断言translation不为NULL
+ * 调用TLB::translate方法，并将返回值赋值给fault
+ * TLB::translate根据m5Reg设置的保护模式和paging功能来判断是否需要translate
+ * 如果delayedResponse为true
+ * 那么调用translation->finish
+ *
  */
 void
 TLB::translateTiming(RequestPtr req, ThreadContext *tc,

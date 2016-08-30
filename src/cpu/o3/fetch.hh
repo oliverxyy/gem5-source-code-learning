@@ -100,8 +100,9 @@ class DefaultFetch
         {}
 		/*
 		 * void:finish
+		 * 断言mode是BaseTLB::Execute(从translateTiming)
 		 * 调用fetch->finishTranslation(fault, req)函数
-		 * 删除this指针
+		 * 删除this指针(调用析构函数删除FetchTranslation对象)
 		 */
         void
         finish(const Fault &fault, RequestPtr req, ThreadContext *tc,

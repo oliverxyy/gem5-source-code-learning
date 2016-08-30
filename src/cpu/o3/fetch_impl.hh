@@ -672,33 +672,21 @@ DefaultFetch<Impl>::lookupAndUpdateNextPC(
 
     return predict_taken;
 }
-/*
- * fetchCacheLine()
- * 初始化fault为NoFault
- * 如果cacheBlocked为true，即cache阻塞
- * 	  直接return false；
- * 如果是中断并且没有延迟提交(!delayedCommit[tid]==true)
- *    直接return false；
- * fetchBufferBlockPC为参数vaddr进行align(重置为0)后的地址
- * RequestPtr mem_re//传参，初始化mem_re变量
- * 用cpu->taskId()初始化mem_re的_taskId的值
- * 令memReq[tid] = mem_re;
- * 将fetchStatus[tid]的状态改为ItlbWait
- * new FetchTranslation(this)实际上初始化的是指向DefaultFetch<Impl>的指针
- * 声明指向FetchTranslation的指针变量trans，并定义
- * 调用cpu->itb->translateTiming()函数
- * 参数为(mem_req, cpu->thread[tid]->getTC(),trans, BaseTLB::Execute);
- * getTC()函数全局查找有三个，作用大致都是返回指向ThreadContext的指针
- * return true;
- */
+
 template <class Impl>
 bool
 DefaultFetch<Impl>::fetchCacheLine(Addr vaddr, ThreadID tid, Addr pc)
 {
+	/*
+	 * 初始化fault为NoFault
+	 * 断言cpu不是switch out的状态
+	 * 如果cacheBlocked为true，即cache阻塞
+	 * 	  直接return false；
+	 * 如果是中断并且没有延迟提交(!delayedCommit[tid]==true)
+	 *    直接return false；
+	 */
     Fault fault = NoFault;
-
     assert(!cpu->switchedOut());
-
     // @todo: not sure if these should block translation.
     //AlphaDep
     if (cacheBlocked) {
@@ -714,7 +702,17 @@ DefaultFetch<Impl>::fetchCacheLine(Addr vaddr, ThreadID tid, Addr pc)
                 tid);
         return false;
     }
-
+    /*
+     * fetchBufferBlockPC为vaddr对齐掩码之后的地址
+     * 实例化一个指向Request的mem_req指针
+     * 并给mem_req的赋值taskId
+     * 令memReq[tid]=mem_req
+     * 令fetchStatus[tid]=ItlbWait
+     * 实例化FetchTranslation类
+     * 调用translateTiming方法
+     * return true
+     *
+     */
     // Align the fetch address to the start of a fetch buffer segment.
     Addr fetchBufferBlockPC = fetchBufferAlignPC(vaddr);
 
@@ -746,7 +744,13 @@ template <class Impl>
 void
 DefaultFetch<Impl>::finishTranslation(const Fault &fault, RequestPtr mem_req)
 {
-	//
+	/*
+	 * 从mem_req中取出之前的thread id
+	 * 获取fetchBufferBlockPC
+	 * 断言cpu不是switch out状态
+	 * 唤醒cpu
+	 *
+	 */
     ThreadID tid = mem_req->threadId();
     Addr fetchBufferBlockPC = mem_req->getVaddr();
 
