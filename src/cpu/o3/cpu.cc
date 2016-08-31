@@ -246,6 +246,7 @@ FullO3CPU<Impl>::FullO3CPU(DerivO3CPUParams *params)
       iewQueue(params->backComSize, params->forwardComSize),
 	  /*
 	   * 根据配置初始化activityRec、globalSeqNum、system、drainManager、lastRunningCycle
+	   *
 	   * 根据配置初始化activityRec，定义于cpu/activity.hh|activity.cc
 	   * 根据配置初始化activityRec，定义于cpu/activity.hh|activity.cc功能主要是通知cpu activities的状态
 	   * 初始化globalSeqNum为1，globalSeqNum是instruction全局计数器
