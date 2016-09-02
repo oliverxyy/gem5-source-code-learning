@@ -57,9 +57,15 @@
 // clang complains about std::set being overloaded with Packet::set if
 // we open up the entire namespace std
 using std::list;
-
+//DefaultDecode构造函数
 template<class Impl>
 DefaultDecode<Impl>::DefaultDecode(O3CPU *_cpu, DerivO3CPUParams *params)
+	/*
+	 * 根据配置初始化cpu
+	 * 根据配置初始化各stage的时延
+	 * 根据配置初始化decodeWidth、numThreads
+	 *
+	 */
     : cpu(_cpu),
       renameToDecodeDelay(params->renameToDecodeDelay),
       iewToDecodeDelay(params->iewToDecodeDelay),
@@ -68,6 +74,13 @@ DefaultDecode<Impl>::DefaultDecode(O3CPU *_cpu, DerivO3CPUParams *params)
       decodeWidth(params->decodeWidth),
       numThreads(params->numThreads)
 {
+	/*
+	 * 如果decodeWidth > Impl::MaxWidth
+	 *    那么输出错误信息并退出程序
+	 * 初始化skidBufferMax
+	 * skidBufferMax含义待定
+	 *
+	 */
     if (decodeWidth > Impl::MaxWidth)
         fatal("decodeWidth (%d) is larger than compiled limit (%d),\n"
              "\tincrease MaxWidth in src/cpu/o3/impl.hh\n",
@@ -463,7 +476,10 @@ DefaultDecode<Impl>::updateStatus()
         }
     }
 }
-
+/*
+ *
+ *
+ */
 template <class Impl>
 void
 DefaultDecode<Impl>::sortInsts()
@@ -549,6 +565,10 @@ template<class Impl>
 void
 DefaultDecode<Impl>::tick()
 {
+	/*
+	 * 初始化wroteToTimeBuffer、status_change为false
+	 * 初始化toRenameIndex为0
+	 */
     wroteToTimeBuffer = false;
 
     bool status_change = false;
