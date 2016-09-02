@@ -437,7 +437,17 @@ DefaultDecode<Impl>::skidsEmpty()
 
     return true;
 }
-
+/*
+ * 如果存在一个decodeStatus[tid]是Unblocking
+ * 那么更新any_unblocking = true
+ * 如果any_unblocking为true
+ * 	  更新Inactive的_status为Active且执行activateStage方法
+ * 否则
+ * 	  更新Active的_status为Inactive且执行deactivateStage方法
+ *
+ * activateStage和deactivateStage主要是记录activityCount信息
+ *
+ */
 template<class Impl>
 void
 DefaultDecode<Impl>::updateStatus()
@@ -477,8 +487,8 @@ DefaultDecode<Impl>::updateStatus()
     }
 }
 /*
- *
- *
+ * 从fromFetch中获取inst并分配给对应的inst[tid]
+ * tid也从fromFetch中获取
  */
 template <class Impl>
 void
@@ -574,7 +584,12 @@ DefaultDecode<Impl>::tick()
     bool status_change = false;
 
     toRenameIndex = 0;
-
+    /*
+     * 通过fromFetch初始化inst[i]
+     * 对所有活动线程：
+     *    通过checkSignalsAndUpdate方法更新status_change
+     * 	  执行decode(bool,ThreadID)方法
+     */
     list<ThreadID>::iterator threads = activeThreads->begin();
     list<ThreadID>::iterator end = activeThreads->end();
 
@@ -589,7 +604,14 @@ DefaultDecode<Impl>::tick()
 
         decode(status_change, tid);
     }
-
+    /*
+     * 如果status_change为true
+     * 更新ActivityRec中stage的状态并更新记录ActivityCount
+     * ActivityCount: Active:+1;Inactive:-1
+     *
+     * 如果wroteToTimeBuffer为true
+     *    ++activityCount(一cycle一次)
+     */
     if (status_change) {
         updateStatus();
     }
@@ -608,10 +630,24 @@ DefaultDecode<Impl>::decode(bool &status_change, ThreadID tid)
     // If status is Running or idle,
     //     call decodeInsts()
     // If status is Unblocking,
-    //     buffer any instructions coming from fetch
+    //     buffer any instructions coming fr2om fetch
     //     continue trying to empty skid buffer
     //     check if stall conditions have passed
-
+	/*
+	 * decodeStatus[tid]
+	 * 	  Blocked:
+	 * 	  	  ++decodeBlockedCycles
+	 * 	  Squashing:
+	 * 	  	  ++decodeSquashCycles
+	 * 	  Running/Idle:
+	 * 	  	  执行decodeInsts(tid)
+	 * 	  Unblocking:
+	 * 	  	  断言skidsEmpty为false,即某skidBuffer[tid]不空
+	 * 	  	  执行decodeInsts(tid)
+	 * 	  	  如果fetchInstsValid为true
+	 *           执行skidInsert方法
+	 *		  通过unblock方法更新status_change
+	 */
     if (decodeStatus[tid] == Blocked) {
         ++decodeBlockedCycles;
     } else if (decodeStatus[tid] == Squashing) {
