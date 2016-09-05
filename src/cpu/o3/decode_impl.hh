@@ -78,8 +78,9 @@ DefaultDecode<Impl>::DefaultDecode(O3CPU *_cpu, DerivO3CPUParams *params)
 	 * 如果decodeWidth > Impl::MaxWidth
 	 *    那么输出错误信息并退出程序
 	 * 初始化skidBufferMax
-	 * skidBufferMax含义待定
-	 *
+	 * skidBufferMax是skidBuffer的最大size
+	 * 每cycle fetch最多产生fetchWidth条指令，
+	 * 加上时延，所以传到decode的指令最多为skidBufferMax条
 	 */
     if (decodeWidth > Impl::MaxWidth)
         fatal("decodeWidth (%d) is larger than compiled limit (%d),\n"
@@ -278,7 +279,14 @@ DefaultDecode<Impl>::block(ThreadID tid)
 
     return false;
 }
-
+/*
+ * 如果skidBuffer[tid]空
+ *    设置toFetch的decodeUnblock[tid]为true
+ *    更新wroteToTimeBuffer为true
+ *    更新decodeStatus[tid]状态为Running
+ *    return true
+ * return false
+ */
 template<class Impl>
 bool
 DefaultDecode<Impl>::unblock(ThreadID tid)
@@ -398,6 +406,13 @@ DefaultDecode<Impl>::squash(ThreadID tid)
     return squash_count;
 }
 
+/*
+ * 如果insts[tid]不空，则进入while循环
+ *    断言tid == inst->threadNumber
+ *    将insts[tid]的元素pop到skidBuffer[tid]的队尾
+ * 断言skidBuffer[tid].size() <= skidBufferMax
+ *
+ */
 template<class Impl>
 void
 DefaultDecode<Impl>::skidInsert(ThreadID tid)
@@ -644,9 +659,10 @@ DefaultDecode<Impl>::decode(bool &status_change, ThreadID tid)
 	 * 	  Unblocking:
 	 * 	  	  断言skidsEmpty为false,即某skidBuffer[tid]不空
 	 * 	  	  执行decodeInsts(tid)
-	 * 	  	  如果fetchInstsValid为true
-	 *           执行skidInsert方法
+	 * 	  	  如果fetchInstsValid为true,即fromFetch的size>0
+	 *           执行skidInsert方法，将insts[tid]的元素pop到skidBuffer中去
 	 *		  通过unblock方法更新status_change
+	 *
 	 */
     if (decodeStatus[tid] == Blocked) {
         ++decodeBlockedCycles;
@@ -688,6 +704,22 @@ DefaultDecode<Impl>::decodeInsts(ThreadID tid)
 {
     // Instructions can come either from the skid buffer or the list of
     // instructions coming from fetch, depending on decode's status.
+	/*
+	 * 初始化insts_available
+	 * 如果insts_available为0
+	 *    ++decodeIdleCycles
+	 *    然后直接return
+	 * 此外如果decodeStatus[tid]的状态为Unblocking
+	 *    ++decodeUnblockCycles
+	 * 此外如果decodeStatus[tid]为Running
+	 *    ++decodeRunCycles
+	 * 初始化insts_to_decode(引用类型，值为skidBuffer[tid]/insts[tid])
+	 * 进入while循环(insts_available > 0 && toRenameIndex < decodeWidth)
+	 *    断言insts_to_decode不空
+	 *
+	 *
+	 *
+	 */
     int insts_available = decodeStatus[tid] == Unblocking ?
         skidBuffer[tid].size() : insts[tid].size();
 
@@ -739,6 +771,12 @@ DefaultDecode<Impl>::decodeInsts(ThreadID tid)
         // them as ready to issue at any time.  Not sure if this check
         // should exist here or at a later stage; however it doesn't matter
         // too much for function correctness.
+        /*
+         * 如果inst没有source registers
+         *    那么调用setCanIssue给它分配
+         *
+         *
+         */
         if (inst->numSrcRegs() == 0) {
             inst->setCanIssue();
         }
