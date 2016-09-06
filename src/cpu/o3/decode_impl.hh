@@ -249,7 +249,14 @@ DefaultDecode<Impl>::fetchInstsValid()
 {
     return fromFetch->size > 0;
 }
-
+/*
+ * 将insts[tid]的元素pop到skidBuffer[tid]中
+ * 如果decodeStatus[tid]不为Blocked
+ *    那么设置decodeStatus[tid]为Blocked
+ *    更新toFetch中Decode的block状态
+ *    return true
+ * return false
+ */
 template<class Impl>
 bool
 DefaultDecode<Impl>::block(ThreadID tid)
@@ -306,6 +313,15 @@ DefaultDecode<Impl>::unblock(ThreadID tid)
     return false;
 }
 
+/*
+ * 配置toFetch中的decodeInfo[tid]的squash相关信号
+ * 设置toFetch的decodeUnblock为1，即不阻塞
+ * 更新decodeStatus[tid]状态为Squashing
+ * 更新fromFetch的insts的每条指令的状态为Squashed
+ * 如果inst[tid]不空，那么pop空
+ * 如果skidBuffer[tid]不空，那么pop空
+ * 将cpu instList中的seqNum标号之后的属于tid的inst全部清空
+ */
 template<class Impl>
 void
 DefaultDecode<Impl>::squash(DynInstPtr &inst, ThreadID tid)
@@ -714,11 +730,6 @@ DefaultDecode<Impl>::decodeInsts(ThreadID tid)
 	 * 此外如果decodeStatus[tid]为Running
 	 *    ++decodeRunCycles
 	 * 初始化insts_to_decode(引用类型，值为skidBuffer[tid]/insts[tid])
-	 * 进入while循环(insts_available > 0 && toRenameIndex < decodeWidth)
-	 *    断言insts_to_decode不空
-	 *
-	 *
-	 *
 	 */
     int insts_available = decodeStatus[tid] == Unblocking ?
         skidBuffer[tid].size() : insts[tid].size();
@@ -744,7 +755,36 @@ DefaultDecode<Impl>::decodeInsts(ThreadID tid)
         skidBuffer[tid] : insts[tid];
 
     DPRINTF(Decode, "[tid:%u]: Sending instruction to rename.\n",tid);
-
+    /*
+     *
+	 * 进入while循环(insts_available > 0 && toRenameIndex < decodeWidth)
+	 *    断言insts_to_decode不空
+	 *    获取insts_to_decode的pop内容inst
+	 *    (c++的pop可能会由于异常导致正常指针后移但队首元素丢失，因而pop并不会返回删除的元素，
+	 *    一般前面加上font，提前获取队首内容)
+	 *    判断inst的squashed状态，如果是：
+	 *       ++decodeSquashedInsts
+	 *       --insts_available;
+	 *       continue(直接进入下一while循环)
+	 *    如果inst没有source registers
+	 *       那么调用setCanIssue给它分配
+	 *    将inst丢入toRename的insts中
+	 *    ++decodeDecodedInsts
+	 *    --insts_available
+	 *    如果inst被预测是个分支
+	 *       ++decodeControlMispred
+	 *       调用squash方法进行flush操作
+	 *       之后break while循环
+	 *    如果inst isDirectCtrl且isUncondCtrl
+	 *       ++decodeBranchResolved
+	 *       如果inst的branchTarget() != inst的readPredTarg()
+	 *          ++decodeBranchMispred
+	 *          调用squash方法进行flush操作
+     *          target为inst的branchTarget()
+     *          设置inst的PredTarg为target
+     *          break while循环
+     * while循环结束
+     */
     while (insts_available > 0 && toRenameIndex < decodeWidth) {
         assert(!insts_to_decode.empty());
 
@@ -771,12 +811,6 @@ DefaultDecode<Impl>::decodeInsts(ThreadID tid)
         // them as ready to issue at any time.  Not sure if this check
         // should exist here or at a later stage; however it doesn't matter
         // too much for function correctness.
-        /*
-         * 如果inst没有source registers
-         *    那么调用setCanIssue给它分配
-         *
-         *
-         */
         if (inst->numSrcRegs() == 0) {
             inst->setCanIssue();
         }
@@ -834,6 +868,11 @@ DefaultDecode<Impl>::decodeInsts(ThreadID tid)
 
     // If we didn't process all instructions, then we will need to block
     // and put all those instructions into the skid buffer.
+    /*
+     * 如果insts_to_decode不空
+     *    调用block方法将decodeStatus[tid]设置为blocked
+     * 如果toRenameIndex不为0，设置wroteToTimeBuffer为true
+     */
     if (!insts_to_decode.empty()) {
         block(tid);
     }
