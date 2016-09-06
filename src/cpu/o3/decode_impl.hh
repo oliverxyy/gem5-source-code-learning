@@ -768,7 +768,7 @@ DefaultDecode<Impl>::decodeInsts(ThreadID tid)
 	 *       continue(直接进入下一while循环)
 	 *    如果inst没有source registers
 	 *       那么调用setCanIssue给它分配
-	 *    将inst丢入toRename的insts中
+	 *    将inst丢入toRename的insts中！！！
 	 *    ++decodeDecodedInsts
 	 *    --insts_available
 	 *    如果inst被预测是个分支
